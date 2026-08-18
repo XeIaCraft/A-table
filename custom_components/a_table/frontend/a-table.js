@@ -63,6 +63,21 @@ const OBJECTIVE_OPTIONS = [
   { value: "reduce_ultra_processed", label: "Réduire les aliments ultra-transformés" },
 ];
 
+const GROCERY_STORE_SEARCH_URLS = [
+  [/delhaize/i, (q) => `https://www.delhaize.be/fr/search?q=${q}`],
+  [/colruyt/i, (q) => `https://www.colruyt.be/fr/rechercher?q=${q}`],
+  [/carrefour/i, (q) => `https://www.carrefour.be/fr/search?q=${q}`],
+  [/cora/i, (q) => `https://www.cora.be/fr/search?text=${q}`],
+  [/intermarch/i, (q) => `https://www.intermarche.com/recherche?q=${q}`],
+  [/aldi/i, (q) => `https://www.aldi.be/fr/recherche.html?query=${q}`],
+  [/lidl/i, (q) => `https://www.lidl.be/q/search?q=${q}`],
+];
+
+function grocerySearchUrl(query, groceryStore) {
+  const match = GROCERY_STORE_SEARCH_URLS.find(([pattern]) => pattern.test(groceryStore || ""));
+  return match ? match[1](query) : `https://www.google.com/search?tbm=shop&q=${query}`;
+}
+
 const ATABLE_GUEST_COURSES = [
   ["aperitif", "Apéritif"],
   ["entree", "Entrée"],
@@ -135,6 +150,8 @@ const ICONS = {
   chart: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17V9M9 17V3M15 17v-6"/></svg>',
   meal: '<svg viewBox="0 0 44 32" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="16" r="10.5"/><circle cx="16" cy="16" r="5.5"/><path d="M32 5v10M35 5v10M32 15c0 2 1.5 2 1.5 4v8M38.5 5c0 4-2 5-2 8v13"/></svg>',
   glass: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10l-1.4 8a3.6 3.6 0 0 1-7.2 0L5 2.5z"/><path d="M10 10.5v7M6.5 17.5h7"/></svg>',
+  pause: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="currentColor"><rect x="5" y="4" width="3.5" height="12" rx="1"/><rect x="11.5" y="4" width="3.5" height="12" rx="1"/></svg>',
+  play: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="currentColor"><path d="M6 4.5v11l9-5.5-9-5.5z"/></svg>',
   message: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h14v9H8.5L5 16.5v-3H3v-9z"/></svg>',
 };
 
@@ -515,7 +532,11 @@ class ATableCard extends HTMLElement {
       .guest-course-picker{margin-bottom:14px;align-items:center}
       .toggle-chip-sm{padding:5px 10px;font-size:11px;margin-right:10px}
       .toggle-chip-sm:has(input:disabled){opacity:.4;cursor:not-allowed}
-      .guest-item{padding:8px 0;border-top:1px solid var(--divider-color,rgba(255,255,255,.08))}
+      .guest-item{padding:10px 0;border-top:1px solid var(--divider-color,rgba(255,255,255,.08))}
+      .guest-item .proposal-nutrition{margin-top:8px}
+      .guest-course-card{padding:16px}
+      .guest-course-card .proposal-section{margin-top:12px;font-size:13px}
+      .guest-course-card .proposal-head{margin-bottom:10px}
       .guest-item:first-child{border-top:none}
       .toggle-chip{position:relative;display:inline-flex;align-items:center;padding:8px 15px;border-radius:99px;border:1px solid var(--at-border);background:var(--at-surface-1);font-size:13px;font-weight:600;color:var(--secondary-text-color,#aeb7c5);cursor:pointer;transition:background-color 150ms var(--at-ease),border-color 150ms var(--at-ease),color 150ms var(--at-ease)}
       .toggle-chip input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
@@ -587,7 +608,7 @@ class ATableCard extends HTMLElement {
           <button class="icon-btn" type="button" data-open-shopping aria-label="Liste de courses" title="Liste de courses">${icon("basket")}</button>
           <button class="icon-btn" type="button" data-open-library aria-label="Mes recettes" title="Mes recettes">${icon("library")}</button>
           <button class="icon-btn" type="button" data-open-history aria-label="Historique" title="Historique">${icon("history")}</button>
-          <button class="icon-btn" type="button" data-open-guest aria-label="Repas invités" title="Repas invités">${icon("glass")}</button>
+          <button class="icon-btn" type="button" data-open-guest aria-label="Repas spécial" title="Repas spécial">${icon("glass")}</button>
           <button class="icon-btn settings" type="button" aria-label="Paramètres" title="Paramètres">${icon("settings")}</button>
           <button class="icon-btn refresh" type="button" aria-label="Actualiser" title="Actualiser">${icon("refresh")}</button>
         </div>
@@ -1045,7 +1066,7 @@ class ATableCard extends HTMLElement {
         ([id, t]) => `<div class="timer-row ${t.done ? "is-done" : ""}">
           <span class="timer-name">${this._esc(t.name)}</span>
           <span class="timer-remaining">${this._formatTimer(t.remaining)}</span>
-          <button class="icon-btn" type="button" data-timer-toggle="${id}" aria-label="Pause/Reprendre">${icon(t.running ? "close" : "check")}</button>
+          <button class="icon-btn" type="button" data-timer-toggle="${id}" aria-label="${t.running ? "Mettre en pause" : "Reprendre"}">${icon(t.running ? "pause" : "play")}</button>
           <button class="icon-btn" type="button" data-timer-remove="${id}" aria-label="Supprimer">${icon("trash")}</button>
         </div>`
       )
@@ -1949,6 +1970,26 @@ class ATableCard extends HTMLElement {
     });
   }
 
+  _mergeIngredientsIntoShoppingMap(byKey, ingredients) {
+    (ingredients || []).forEach((ing) => {
+      const name = String(ing.name || "").trim();
+      if (!name) return;
+      const unit = String(ing.unit || "").trim();
+      const key = `${name.toLowerCase()}|${unit.toLowerCase()}`;
+      const quantity = Number(ing.quantity);
+      if (!byKey.has(key)) {
+        byKey.set(key, { key, name, unit, quantity: Number.isFinite(quantity) ? quantity : null, uncertain: !Number.isFinite(quantity), category: categorizeIngredient(name) });
+      } else {
+        const entry = byKey.get(key);
+        if (Number.isFinite(quantity) && !entry.uncertain) {
+          entry.quantity += quantity;
+        } else {
+          entry.uncertain = true;
+        }
+      }
+    });
+  }
+
   _shoppingItems() {
     const exported = new Set(this._data?.shopping_list_exported_recipe_ids || []);
     const cards = this._activeMealCards().filter(
@@ -1960,21 +2001,15 @@ class ATableCard extends HTMLElement {
       const recipe = this._data?.recipes?.[card.recipe_id];
       if (!recipe) return;
       const scaled = this._scaledIngredients(recipe, card.servings || recipe.servings);
-      scaled.forEach((ing) => {
-        const name = String(ing.name || "").trim();
-        if (!name) return;
-        const unit = String(ing.unit || "").trim();
-        const key = `${name.toLowerCase()}|${unit.toLowerCase()}`;
-        const quantity = Number(ing.quantity);
-        if (!byKey.has(key)) {
-          byKey.set(key, { key, name, unit, quantity: Number.isFinite(quantity) ? quantity : null, uncertain: !Number.isFinite(quantity), category: categorizeIngredient(name) });
+      this._mergeIngredientsIntoShoppingMap(byKey, scaled);
+    });
+
+    Object.values(this._data?.guest_menus || {}).forEach((menu) => {
+      Object.values(menu.courses || {}).forEach((course) => {
+        if (Array.isArray(course.items)) {
+          course.items.forEach((item) => this._mergeIngredientsIntoShoppingMap(byKey, item.ingredients));
         } else {
-          const entry = byKey.get(key);
-          if (Number.isFinite(quantity) && !entry.uncertain) {
-            entry.quantity += quantity;
-          } else {
-            entry.uncertain = true;
-          }
+          this._mergeIngredientsIntoShoppingMap(byKey, course.ingredients);
         }
       });
     });
@@ -2094,6 +2129,31 @@ class ATableCard extends HTMLElement {
 
   // ---- Module Invité -------------------------------------------------------
 
+  _nutritionGridHTML(nutrition) {
+    const n = nutrition || {};
+    if (n.kcal == null && n.protein_g == null && n.carb_g == null && n.fat_g == null && n.fiber_g == null) return "";
+    return `<div class="proposal-nutrition">
+      <div class="nutrition-item"><b>${this._esc(n.kcal ?? "–")}</b><span>kcal</span></div>
+      <div class="nutrition-item"><b>${this._esc(n.protein_g ?? "–")}</b><span>protéines</span></div>
+      <div class="nutrition-item"><b>${this._esc(n.carb_g ?? "–")}</b><span>glucides</span></div>
+      <div class="nutrition-item"><b>${this._esc(n.fat_g ?? "–")}</b><span>lipides</span></div>
+      <div class="nutrition-item"><b>${this._esc(n.fiber_g ?? "–")}</b><span>fibres</span></div>
+    </div>`;
+  }
+
+  _stepsWithTimersHTML(steps) {
+    if (!steps?.length) return "";
+    return `<ol>${steps
+      .map((s) => {
+        const minutes = this._stepTimerMinutes(s);
+        const timerBtn = minutes
+          ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc(s.slice(0, 30))}">⏱ Lancer (${minutes} min)</button>`
+          : "";
+        return `<li>${this._esc(s)}${timerBtn}</li>`;
+      })
+      .join("")}</ol>`;
+  }
+
   _guestCourseCardHTML(key, label, course) {
     if (!course || !course.title) return "";
     let body;
@@ -2103,13 +2163,11 @@ class ATableCard extends HTMLElement {
           const ingredients = (item.ingredients || [])
             .map((ing) => `${ing.quantity || ""} ${ing.unit || ""} ${ing.name || ""}`)
             .join(", ");
-          const steps = item.steps?.length
-            ? `<ol>${item.steps.map((s) => `<li>${this._esc(s)}</li>`).join("")}</ol>`
-            : "";
           return `<div class="guest-item">
             <strong>${this._esc(item.title || "")}</strong>
             <span>${this._esc(ingredients || "Aucun ingrédient")}</span>
-            ${steps}
+            ${this._stepsWithTimersHTML(item.steps)}
+            ${this._nutritionGridHTML(item.nutrition)}
           </div>`;
         })
         .join("");
@@ -2117,16 +2175,14 @@ class ATableCard extends HTMLElement {
       const ingredients = (course.ingredients || [])
         .map((ing) => `${ing.quantity || ""} ${ing.unit || ""} ${ing.name || ""}`)
         .join(", ");
-      const steps = course.steps?.length
-        ? `<ol>${course.steps.map((s) => `<li>${this._esc(s)}</li>`).join("")}</ol>`
-        : "";
       body = `<div class="proposal-section">
         <strong>Ingrédients</strong>
         <span>${this._esc(ingredients || "Aucun")}</span>
       </div>
-      ${steps ? `<div class="proposal-section"><strong>Étapes</strong>${steps}</div>` : ""}`;
+      ${course.steps?.length ? `<div class="proposal-section"><strong>Étapes</strong>${this._stepsWithTimersHTML(course.steps)}</div>` : ""}
+      ${this._nutritionGridHTML(course.nutrition) ? `<div class="proposal-section"><strong>Nutrition</strong>${this._nutritionGridHTML(course.nutrition)}</div>` : ""}`;
     }
-    return `<div class="proposal" data-guest-course="${key}">
+    return `<div class="proposal guest-course-card" data-guest-course="${key}">
       <div class="proposal-head">
         <strong class="proposal-title">${label} — ${this._esc(course.title)}</strong>
         <button class="icon-btn proposal-replace" type="button" data-regenerate-course="${key}" aria-label="Remplacer ce plat" title="Remplacer ce plat">${icon("refresh")}</button>
@@ -2160,7 +2216,7 @@ class ATableCard extends HTMLElement {
       ).join("");
       return `<section class="dialog">
         <header class="dialog-top">
-          <h2>Repas invités</h2>
+          <h2>Repas spécial</h2>
           <button class="close" type="button">${icon("close")}</button>
         </header>
         <p class="taste-hint">Compose un repas complet avec des suggestions d'accord mets-vins, via l'IA. Choisis les services souhaités ; coche "Assortiment" pour un service qui propose plusieurs variantes (ex. plusieurs sortes de sushis).</p>
@@ -2186,19 +2242,19 @@ class ATableCard extends HTMLElement {
     const groceryStore = this._data?.preferences?.grocery_store || "";
     const wineCards = (menu.wine_pairings || [])
       .map((p) => {
-        const query = encodeURIComponent(`${p.style || ""} ${groceryStore}`.trim());
-        const searchLabel = groceryStore ? `Chercher chez ${this._esc(groceryStore)}` : "Chercher";
+        const query = encodeURIComponent(p.style || "");
+        const searchLabel = groceryStore ? `Chercher chez ${this._esc(groceryStore)}` : "Chercher en magasin";
         return `<div class="wine-pairing">
           <strong>${this._esc(p.style || "")}</strong>
           <span>${this._esc(p.description || "")}</span>
-          <a href="https://www.google.com/search?q=${query}" target="_blank" rel="noopener" class="wine-search-link">${searchLabel} ↗</a>
+          <a href="${grocerySearchUrl(query, groceryStore)}" target="_blank" rel="noopener" class="wine-search-link">${searchLabel} ↗</a>
         </div>`;
       })
       .join("");
 
     return `<section class="dialog">
       <header class="dialog-top">
-        <h2>Repas invités — ${this._esc(menu.guests)} convives</h2>
+        <h2>Repas spécial — ${this._esc(menu.guests)} convives</h2>
         <button class="close" type="button">${icon("close")}</button>
       </header>
       <div class="facts">
@@ -2207,6 +2263,15 @@ class ATableCard extends HTMLElement {
           <h3>Accords mets-vins</h3>
           <button class="icon-btn" type="button" data-regenerate-wine aria-label="Régénérer les suggestions" title="Régénérer les suggestions">${icon("refresh")}</button>
           ${wineCards || "<span>Aucune suggestion.</span>"}
+        </div>
+      </div>
+      <div class="refine-section">
+        <h3>Chronos</h3>
+        <div class="timers-list" data-timers-list>${this._timersListHTML()}</div>
+        <div class="row timer-add-row">
+          <input type="text" placeholder="Nom (facultatif)" data-timer-name>
+          <input type="number" min="1" placeholder="Min." data-timer-minutes style="max-width:80px">
+          <button class="cancel" type="button" data-add-timer>+ Chrono</button>
         </div>
       </div>
       <footer class="actions">
@@ -2218,6 +2283,7 @@ class ATableCard extends HTMLElement {
 
   _bindGuestModal(overlay) {
     overlay.querySelector("[data-close-guest]")?.addEventListener("click", () => this._closeModal());
+    if (this._modal.menu_id) this._bindTimers(overlay);
     overlay.querySelectorAll('[name="course_keys"]').forEach((cb) => {
       cb.addEventListener("change", () => {
         const composedCb = overlay.querySelector(`[name="composed_keys"][value="${cb.value}"]`);
@@ -2285,7 +2351,7 @@ class ATableCard extends HTMLElement {
     });
 
     overlay.querySelector("[data-dismiss-guest]")?.addEventListener("click", async () => {
-      if (!confirm("Supprimer ce menu invité ?")) return;
+      if (!confirm("Supprimer ce menu ?")) return;
       try {
         await this._ws({ type: "a_table/dismiss_guest_menu", menu_id: this._modal.menu_id });
         if (this._data.guest_menus) delete this._data.guest_menus[this._modal.menu_id];
@@ -2551,15 +2617,10 @@ class ATableCard extends HTMLElement {
         </div>
         <div class="settings-section">
           <h3>Illustrations de plats (facultatif)</h3>
-          <p class="taste-hint">Recherche d'image via l'API Google Custom Search — voir le README pour la procédure de création de la clé et du moteur de recherche.</p>
-          <div class="row">
-            <label>Clé API Google Custom Search
-              <input name="google_search_api_key" value="${this._esc(prefs.google_search_api_key || "")}" type="password" autocomplete="off">
-            </label>
-            <label>ID du moteur de recherche (cx)
-              <input name="google_search_engine_id" value="${this._esc(prefs.google_search_engine_id || "")}" autocomplete="off">
-            </label>
-          </div>
+          <p class="taste-hint">Recherche d'image via l'API Pexels — voir le README pour la procédure de création de la clé (gratuite, sans carte bancaire).</p>
+          <label>Clé API Pexels
+            <input name="pexels_api_key" value="${this._esc(prefs.pexels_api_key || "")}" type="password" autocomplete="off">
+          </label>
         </div>
       </div>
 
@@ -2921,8 +2982,7 @@ class ATableCard extends HTMLElement {
       objectives,
       ai_task_entity_id: String(data.get("ai_task_entity_id") || "") || prefs.ai_task_entity_id,
       todo_entity_id: String(data.get("todo_entity_id") || "") || null,
-      google_search_api_key: String(data.get("google_search_api_key") || "") || null,
-      google_search_engine_id: String(data.get("google_search_engine_id") || "") || null,
+      pexels_api_key: String(data.get("pexels_api_key") || "") || null,
       budget_per_serving: data.get("budget_per_serving") ? Number(data.get("budget_per_serving")) : null,
       target_kcal_per_serving: data.get("target_kcal_per_serving") ? Number(data.get("target_kcal_per_serving")) : null,
       grocery_store: String(data.get("grocery_store") || ""),

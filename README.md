@@ -19,13 +19,13 @@ pour recevoir des invités — le tout piloté depuis une carte Lovelace dédié
   manuelle sans appel IA.
 - **Liste de courses** agrégée à partir des repas planifiés, quantités ajustées aux
   portions réelles et à l'appétit du foyer, transférable vers une liste de tâches HA.
-- **Module Invité** : compose un repas complet (apéritif/entrée/plat/dessert, ou un
+- **Repas spécial** : compose un repas complet (apéritif/entrée/plat/dessert, ou un
   sous-ensemble de ton choix, avec possibilité d'assortiments à plusieurs variantes —
   ex. plusieurs sortes de sushis) avec des suggestions d'accord mets-vins.
 - **Analyse des habitudes** : suggestions de goûts aimés/à éviter à partir de
   l'historique récent, sur demande.
 - **Capteur `sensor.a_table_repas_du_jour`** pour tes automatisations/notifications.
-- **Illustrations de plats** (facultatif) via l'API Google Custom Search.
+- **Illustrations de plats** (facultatif) via l'API Pexels.
 
 **Toutes les fonctionnalités IA sont déclenchées manuellement, jamais en arrière-plan** —
 pensé pour rester dans les limites du palier gratuit de Gemini.
@@ -55,25 +55,33 @@ d'une entité `ai_task` configurée :
    Paramètres de À table → Intégrations → "Entité IA utilisée pour les générations".
 4. Le palier gratuit de Gemini a un quota de requêtes limité (variable selon le modèle) —
    c'est pourquoi aucune génération n'est automatique dans cette intégration : chaque
-   appel IA (génération hebdomadaire, dialogue, import de recette, menu invité, analyse
+   appel IA (génération hebdomadaire, dialogue, import de recette, repas spécial, analyse
    des goûts) part d'un clic explicite.
 
 ## Illustrations de plats (facultatif)
 
-Pour activer la recherche automatique d'image par titre de plat :
+Pour activer la recherche automatique d'image par titre de plat, l'intégration utilise
+l'API **Pexels** — gratuite, une seule clé à générer instantanément, sans carte bancaire
+ni projet cloud à configurer :
 
-1. Crée une clé API sur la [console Google Cloud](https://console.cloud.google.com/apis/credentials),
-   avec l'API **Custom Search API** activée (gratuite jusqu'à 100 requêtes/jour).
-2. Crée un moteur de recherche personnalisé sur
-   [programmablesearchengine.google.com](https://programmablesearchengine.google.com/),
-   configuré pour rechercher sur tout le Web, avec la recherche d'images activée. Note
-   son identifiant (« cx »).
-3. Renseigne la clé API et l'identifiant dans Paramètres de À table → Intégrations →
-   "Illustrations de plats".
+1. Crée un compte gratuit sur [pexels.com](https://www.pexels.com/).
+2. Génère une clé API sur [pexels.com/api](https://www.pexels.com/api/) (approbation
+   quasi instantanée).
+3. Renseigne la clé dans Paramètres de À table → Intégrations → "Illustrations de plats".
 4. Un bouton "Illustrer" apparaît dans la fiche détail de chaque recette.
 
-Sans configuration, cette fonctionnalité reste simplement inactive — tout le reste de
-l'application fonctionne normalement.
+Quota gratuit : 200 requêtes/heure, 20 000/mois — largement suffisant pour un usage
+manuel, plat par plat. Sans configuration, cette fonctionnalité reste simplement
+inactive — tout le reste de l'application fonctionne normalement.
+
+**Dépannage** : si le bouton "Illustrer" renvoie une erreur, elle inclut maintenant le
+détail exact renvoyé par Pexels (clé invalide, quota dépassé, etc.) — vérifie la clé
+collée dans Paramètres si le message mentionne une clé invalide.
+
+> Cette fonctionnalité utilisait auparavant l'API Google Custom Search ; elle a été
+> remplacée par Pexels (plus simple à configurer, et Google a fermé son API de recherche
+> personnalisée aux nouveaux comptes en 2025). Si tu avais configuré une clé Google, elle
+> n'est plus utilisée — renseigne une clé Pexels à la place.
 
 ## Mise à jour
 

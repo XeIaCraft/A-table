@@ -983,42 +983,43 @@ class ATableCoordinator:
         await self.store.async_save()
 
     async def async_fetch_recipe_image(self, recipe_id: str) -> dict[str, Any]:
-        """Cherche une illustration pour une recette via l'API Google Custom Search."""
+        """Cherche une illustration pour une recette via l'API Pexels."""
         recipe = self.store.data["recipes"].get(recipe_id)
         if recipe is None:
             raise ValueError("Recette introuvable")
 
         prefs = self.store.data.get("preferences", {})
-        api_key = prefs.get("google_search_api_key")
-        engine_id = prefs.get("google_search_engine_id")
-        if not api_key or not engine_id:
-            raise ValueError("Configure ta clé Google Custom Search dans Paramètres → Intégrations.")
+        api_key = prefs.get("pexels_api_key")
+        if not api_key:
+            raise ValueError("Configure ta clé Pexels dans Paramètres → Intégrations.")
 
         session = async_get_clientsession(self.hass)
         params = {
-            "key": api_key,
-            "cx": engine_id,
-            "q": recipe.get("title", ""),
-            "searchType": "image",
-            "num": 1,
-            "safe": "active",
+            "query": recipe.get("title", ""),
+            "per_page": 1,
+            "orientation": "landscape",
         }
         try:
-            async with session.get("https://www.googleapis.com/customsearch/v1", params=params) as resp:
+            async with session.get(
+                "https://api.pexels.com/v1/search",
+                params=params,
+                headers={"Authorization": api_key},
+            ) as resp:
+                body = await resp.json(content_type=None)
                 if resp.status != 200:
-                    raise ValueError(f"Recherche d'image impossible (code {resp.status}).")
-                data = await resp.json()
+                    detail = body.get("error") if isinstance(body, dict) else None
+                    raise ValueError(f"Recherche d'image impossible (Pexels, code {resp.status}) : {detail or 'erreur inconnue'}.")
         except ValueError:
             raise
         except Exception as e:
             logger.error(f"Erreur de recherche d'image : {e}")
             raise ValueError("Recherche d'image impossible. Réessaie.") from e
 
-        items = data.get("items") or []
-        if not items or not items[0].get("link"):
+        photos = body.get("photos") or []
+        if not photos or not photos[0].get("src", {}).get("large"):
             raise ValueError("Aucune image trouvée pour ce plat.")
 
-        recipe["image_url"] = items[0]["link"]
+        recipe["image_url"] = photos[0]["src"]["large"]
         recipe["image_status"] = "found"
         recipe["updated_at"] = dt_util.now().isoformat()
         await self.store.async_save()
@@ -1203,10 +1204,19 @@ class ATableCoordinator:
             lines.append(f"- Occasion / contraintes précisées par l'utilisateur : {notes}")
         return "\n".join(lines)
 
+    _NUTRITION_SKELETON = '{"kcal": 420, "protein_g": 12, "carb_g": 55, "fat_g": 14, "fiber_g": 8}'
+
     def _guest_course_json_skeleton(self, key: str, composed: bool) -> str:
         if composed:
-            return f'    "{key}": {{"title": "...", "notes": "...", "items": [{{"title": "...", "ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], "steps": ["..."]}}]}}'
-        return f'    "{key}": {{"title": "...", "ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], "steps": ["..."], "notes": "..."}}'
+            return (
+                f'    "{key}": {{"title": "...", "notes": "...", "items": [{{"title": "...", '
+                f'"ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], "steps": ["..."], '
+                f'"nutrition": {self._NUTRITION_SKELETON}}}]}}'
+            )
+        return (
+            f'    "{key}": {{"title": "...", "ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], '
+            f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}}}'
+        )
 
     async def async_generate_guest_menu(
         self,
@@ -1245,9 +1255,10 @@ class ATableCoordinator:
             f"ou de techniques d'un plat à l'autre) : {course_labels}. Adapte-toi aux régimes/"
             "allergies du foyer, en utilisant en priorité les aliments déjà disponibles si "
             f"pertinent.{composed_note} Propose aussi 2 à 4 suggestions d'accord mets-vins sous "
-            "forme de STYLES (ex. \"rouge léger et fruité\", \"blanc sec et minéral\", \"blanc "
-            "moelleux ou pétillant\") avec une courte justification liée au menu — jamais un nom "
-            "de marque ou de domaine précis, car cela ne peut pas être vérifié.\n\n"
+            "forme d'appellations ou dénominations réelles et courantes (AOC/AOP, ex. \"Côtes du "
+            "Rhône rouge\", \"Chablis\", \"Beaujolais-Villages\", \"Sancerre blanc\") avec une "
+            "courte justification liée au menu — jamais un nom de marque, de domaine ou de "
+            "producteur précis, car cela ne peut pas être vérifié.\n\n"
             "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
             "exactement au format :\n"
             "{\n"
@@ -1336,7 +1347,10 @@ class ATableCoordinator:
         result_skeleton = (
             self._guest_course_json_skeleton(course_key, True).split(": ", 1)[1]
             if is_composed
-            else '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], "steps": ["..."], "notes": "..."}'
+            else (
+                '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], '
+                f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}}}'
+            )
         )
 
         instructions = (
@@ -1408,9 +1422,10 @@ class ATableCoordinator:
 
         instructions = (
             "Voici le menu d'un repas invités :\n" + "\n".join(course_lines) + "\n\n"
-            "Propose 2 à 4 suggestions d'accord mets-vins sous forme de STYLES (ex. \"rouge léger "
-            "et fruité\", \"blanc sec et minéral\"), jamais de marque ou domaine précis, avec une "
-            "courte justification liée au menu.\n\n"
+            "Propose 2 à 4 suggestions d'accord mets-vins sous forme d'appellations ou dénominations "
+            "réelles et courantes (AOC/AOP, ex. \"Côtes du Rhône rouge\", \"Chablis\", \"Beaujolais-"
+            "Villages\"), jamais de marque, domaine ou producteur précis, avec une courte "
+            "justification liée au menu.\n\n"
             "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
             'exactement au format : {"wine_pairings": [{"style": "...", "description": "..."}]}'
         )
