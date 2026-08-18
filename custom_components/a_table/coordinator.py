@@ -17,6 +17,18 @@ from .store import ATableStore
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_AI_TASK_ENTITY_ID = "ai_task.google_ai_task"
+
+RECIPE_QUALITY_GUIDELINES = (
+    "EXIGENCES DE QUALITÉ :\n"
+    "- Le titre doit être descriptif et citer les ingrédients ou la technique principale "
+    "(ex. \"Curry de pois chiches, courgettes et tomates au riz\"), jamais un titre vague "
+    "comme \"Plat du mardi\" ou \"Recette rapide\".\n"
+    "- Les étapes doivent être suffisamment détaillées (temps de cuisson, quantités, "
+    "températures quand pertinent) pour qu'un débutant puisse suivre sans ambiguïté : "
+    "au moins 4 à 6 étapes selon la complexité du plat, jamais une seule phrase vague."
+)
+
 
 class ATableCoordinator:
     """Centralise les opérations sur recettes, planning et historique."""
@@ -29,6 +41,24 @@ class ATableCoordinator:
     def get_data(self) -> dict[str, Any]:
         """Retourne les données de l'application."""
         return self.store.data
+
+    def _ai_task_entity_id(self, prefs: dict[str, Any]) -> str:
+        """Retourne l'entité ai_task configurée, ou la valeur par défaut."""
+        return prefs.get("ai_task_entity_id") or DEFAULT_AI_TASK_ENTITY_ID
+
+    def _match_temp_ingredient_ids(
+        self,
+        ingredients: list[dict[str, Any]],
+        temp_ings: list[dict[str, Any]],
+    ) -> set[str]:
+        """Retourne les identifiants d'aliments temporaires utilisés par ces ingrédients."""
+        ing_names = {(i.get("name", "") or "").lower() for i in ingredients if isinstance(i, dict)}
+        matched = set()
+        for t in temp_ings:
+            t_name = (t.get("name", "") or "").lower()
+            if t_name and any(t_name in n for n in ing_names):
+                matched.add(t.get("id"))
+        return matched
 
     async def async_add_recipe(
         self,
@@ -163,6 +193,7 @@ class ATableCoordinator:
             "Écris de manière naturelle, comme un vrai humain qui cuisine.\n\n"
             "CONTEXTE UTILISATEUR (à respecter strictement) :\n"
             f"{context}\n\n"
+            f"{RECIPE_QUALITY_GUIDELINES}\n\n"
             "RÉSULTAT ATTENDU :\n"
             "Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, exactement au format :\n"
             "{\n"
@@ -196,7 +227,7 @@ class ATableCoordinator:
             "generate_data",
             {
                 "task_name": "Génération de propositions de repas",
-                "entity_id": "ai_task.google_ai_task",
+                "entity_id": self._ai_task_entity_id(prefs),
                 "instructions": instructions,
             },
             blocking=True,
@@ -281,7 +312,7 @@ class ATableCoordinator:
             "generate_data",
             {
                 "task_name": "Analyse des habitudes culinaires",
-                "entity_id": "ai_task.google_ai_task",
+                "entity_id": self._ai_task_entity_id(prefs),
                 "instructions": instructions,
             },
             blocking=True,
@@ -451,11 +482,17 @@ class ATableCoordinator:
         max_fav = rules.get("max_favorites", 2)
         max_rec = rules.get("max_recurrence", 1)
         min_new_pct = rules.get("min_new_recipes_pct", 90)
+        max_protein = rules.get("max_repeat_protein", 2)
+        max_starch = rules.get("max_repeat_starch", 2)
+        max_vegetable = rules.get("max_repeat_vegetable", 2)
         lines.append(
             "- QUOTAS DE DIVERSITÉ À RESPECTER STRICTEMENT :\n"
             f"- Au maximum {max_fav} proposition(s) parmi les recettes favorites ou évaluées positivement (👍) ci-dessus.\n"
             f"- Au maximum {max_rec} répétition(s) d'un plat identique ou très similaire à l'historique récent.\n"
-            f"- Au moins {min_new_pct}% des propositions doivent être de nouvelles recettes, absentes de la bibliothèque personnelle listée ci-dessus."
+            f"- Au moins {min_new_pct}% des propositions doivent être de nouvelles recettes, absentes de la bibliothèque personnelle listée ci-dessus.\n"
+            f"- Au maximum {max_protein} proposition(s) partageant la même protéine principale (ex. poulet, boeuf, tofu).\n"
+            f"- Au maximum {max_starch} proposition(s) partageant le même féculent principal (ex. riz, pâtes, pommes de terre).\n"
+            f"- Au maximum {max_vegetable} proposition(s) partageant le même légume principal."
         )
 
         return "\n".join(lines)
@@ -504,11 +541,7 @@ class ATableCoordinator:
             title = mod.get("title", proposal.get("title", "Recette sans titre"))
 
             ingredients = mod.get("ingredients", proposal.get("ingredients", []))
-            ing_names = { (i.get("name", "") or "").lower() for i in ingredients if isinstance(i, dict) }
-            for t in temp_ings:
-                t_name = (t.get("name", "") or "").lower()
-                if t_name and any(t_name in n for n in ing_names):
-                    used_temp_names.add(t.get("id"))
+            used_temp_names |= self._match_temp_ingredient_ids(ingredients, temp_ings)
 
             recipe = {
                 "id": recipe_id,
@@ -565,6 +598,94 @@ class ATableCoordinator:
             "recipe_ids": new_recipe_ids,
             "card_ids": new_card_ids,
         }
+
+    async def async_regenerate_proposal(self, draft_id: str, index: int) -> dict[str, Any]:
+        """Remplace une seule proposition d'un brouillon par une nouvelle, via l'IA."""
+        drafts = self.store.data.get("drafts", {})
+        draft = drafts.get(draft_id)
+        if draft is None:
+            raise ValueError(f"Brouillon {draft_id} introuvable")
+
+        proposals = draft.get("proposals", [])
+        if index < 0 or index >= len(proposals):
+            raise ValueError("Proposition introuvable dans ce brouillon")
+
+        old_proposal = proposals[index]
+        prefs = self.store.data.get("preferences", {})
+        rules = self.store.data.get("generation_rules", {})
+        temp_ings = self.store.data.get("temporary_ingredients", [])
+        recipes = self.store.data.get("recipes", {})
+        history = self.store.data.get("history", [])
+
+        context = self._build_prompt_context(1, prefs, rules, temp_ings, recipes, history)
+
+        required_temp_ids = self._match_temp_ingredient_ids(old_proposal.get("ingredients", []), temp_ings)
+        required_temp_names = [t.get("name", "") for t in temp_ings if t.get("id") in required_temp_ids]
+        replacement_note = (
+            f"\n\nCONSIGNE DE REMPLACEMENT : la proposition précédente (\"{old_proposal.get('title', '')}\") "
+            "ne convient pas et doit être remplacée par une AUTRE idée, cohérente avec le contexte ci-dessus."
+        )
+        if required_temp_names:
+            replacement_note += (
+                " La proposition précédente utilisait les aliments à utiliser en priorité suivants : "
+                f"{', '.join(required_temp_names)}. La nouvelle proposition DOIT aussi les utiliser."
+            )
+
+        instructions = (
+            "Tu es un assistant de planification de repas. "
+            "Propose une recette réaliste, appétissante, cohérente et adaptée au foyer. "
+            "Écris de manière naturelle, comme un vrai humain qui cuisine.\n\n"
+            "CONTEXTE UTILISATEUR (à respecter strictement) :\n"
+            f"{context}"
+            f"{replacement_note}\n\n"
+            f"{RECIPE_QUALITY_GUIDELINES}\n\n"
+            "RÉSULTAT ATTENDU :\n"
+            "Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, exactement au format :\n"
+            "{\n"
+            '  "title": "Nom du plat",\n'
+            '  "servings": 2,\n'
+            '  "cooking_minutes": 25,\n'
+            '  "ingredients": [\n'
+            '    {"name": "pâtes", "quantity": 200, "unit": "g"}\n'
+            "  ],\n"
+            '  "steps": ["Étape 1...", "Étape 2..."],\n'
+            '  "notes": "...",\n'
+            '  "nutrition": {"kcal": 420, "protein_g": 12, "carb_g": 55, "fat_g": 14, "fiber_g": 8},\n'
+            '  "tags": ["rapide", "végétarien"],\n'
+            '  "price_per_serving": 3.5\n'
+            "}"
+        )
+
+        response = await self.hass.services.async_call(
+            "ai_task",
+            "generate_data",
+            {
+                "task_name": "Remplacement d'une proposition de repas",
+                "entity_id": self._ai_task_entity_id(prefs),
+                "instructions": instructions,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        response_text = response.get("data") or response.get("response") or response.get("result") or ""
+
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
+        if json_match:
+            response_text = json_match.group(0)
+
+        try:
+            new_proposal = json.loads(response_text)
+            if not isinstance(new_proposal, dict) or not new_proposal.get("title"):
+                raise ValueError("Réponse IA invalide")
+        except Exception as e:
+            logger.error(f"Erreur de parsing JSON (remplacement de proposition) : {e}")
+            raise ValueError("L'IA n'a pas pu générer de remplacement. Réessaie.") from e
+
+        proposals[index] = new_proposal
+        await self.store.async_save()
+
+        return new_proposal
 
     def _next_position(self, placement: str) -> int:
         """Calcule la prochaine position libre d'un emplacement."""
@@ -692,6 +813,138 @@ class ATableCoordinator:
         return checked
 
     async def async_clear_shopping_checked(self) -> None:
-        """Vide l'état coché de la liste de courses (nouvelle semaine de courses)."""
+        """Recommence la liste de courses : vide les cases cochées et les recettes déjà exportées."""
         self.store.data["shopping_list_checked"] = {}
+        self.store.data["shopping_list_exported_recipe_ids"] = []
         await self.store.async_save()
+
+    async def async_export_shopping_list(self, recipe_ids: list[str]) -> None:
+        """Marque des recettes comme déjà exportées vers la liste de tâches."""
+        exported = set(self.store.data.setdefault("shopping_list_exported_recipe_ids", []))
+        exported.update(recipe_ids)
+        self.store.data["shopping_list_exported_recipe_ids"] = list(exported)
+        await self.store.async_save()
+
+    async def async_import_recipe(
+        self,
+        text: str | None = None,
+        media_content_id: str | None = None,
+        media_content_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Structure une recette (texte et/ou photo) via l'IA et l'ajoute au backlog."""
+        if not text and not media_content_id:
+            raise ValueError("Fournis un texte ou une photo de recette")
+
+        prefs = self.store.data.get("preferences", {})
+
+        instructions = (
+            "Voici une recette fournie par l'utilisateur (texte et/ou photo en pièce jointe). "
+            "Structure-la au format JSON exact ci-dessous, en français. Estime raisonnablement "
+            "les valeurs manquantes plutôt que de les laisser vides quand c'est possible "
+            "(temps de cuisson, portions par défaut 2, tags pertinents, nutrition approximative). "
+            "Ne modifie pas le fond de la recette : reste fidèle à ce qui est fourni.\n\n"
+            f"{RECIPE_QUALITY_GUIDELINES}\n\n"
+        )
+        if text:
+            instructions += f"TEXTE FOURNI :\n{text}\n\n"
+
+        instructions += (
+            "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
+            "exactement au format :\n"
+            "{\n"
+            '  "title": "Nom du plat",\n'
+            '  "servings": 2,\n'
+            '  "cooking_minutes": 25,\n'
+            '  "ingredients": [{"name": "pâtes", "quantity": 200, "unit": "g"}],\n'
+            '  "steps": ["Étape 1...", "Étape 2..."],\n'
+            '  "notes": "...",\n'
+            '  "nutrition": {"kcal": 420, "protein_g": 12, "carb_g": 55, "fat_g": 14, "fiber_g": 8},\n'
+            '  "tags": ["rapide", "végétarien"],\n'
+            '  "price_per_serving": 3.5\n'
+            "}"
+        )
+
+        service_data: dict[str, Any] = {
+            "task_name": "Import d'une recette",
+            "entity_id": self._ai_task_entity_id(prefs),
+            "instructions": instructions,
+        }
+        if media_content_id:
+            service_data["attachments"] = [
+                {
+                    "media_content_id": media_content_id,
+                    "media_content_type": media_content_type or "image/jpeg",
+                    "metadata": {"title": "Photo de recette", "media_class": "image"},
+                }
+            ]
+
+        response = await self.hass.services.async_call(
+            "ai_task",
+            "generate_data",
+            service_data,
+            blocking=True,
+            return_response=True,
+        )
+
+        response_text = response.get("data") or response.get("response") or response.get("result") or ""
+
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
+        if json_match:
+            response_text = json_match.group(0)
+
+        try:
+            parsed = json.loads(response_text)
+            if not isinstance(parsed, dict) or not parsed.get("title"):
+                raise ValueError("Réponse IA invalide")
+        except Exception as e:
+            logger.error(f"Erreur de parsing JSON (import de recette) : {e}")
+            raise ValueError(
+                "L'IA n'a pas pu structurer cette recette. Réessaie avec un texte plus complet."
+            ) from e
+
+        now = dt_util.now().isoformat()
+        recipe_id = f"recipe_{uuid4().hex}"
+        servings = parsed.get("servings") or 2
+
+        recipe = {
+            "id": recipe_id,
+            "title": parsed.get("title", "Recette importée"),
+            "source": {"kind": "personal_manual"},
+            "is_favorite": False,
+            "is_archived": False,
+            "servings": servings,
+            "cooking_minutes": parsed.get("cooking_minutes"),
+            "tags": parsed.get("tags") or [],
+            "ingredients": parsed.get("ingredients") or [],
+            "steps": parsed.get("steps") or [],
+            "notes": parsed.get("notes", ""),
+            "nutrition": parsed.get("nutrition") or {},
+            "image_url": None,
+            "image_alt": "",
+            "image_status": "missing",
+            "image_reference": None,
+            "price_per_serving": parsed.get("price_per_serving"),
+            "last_cooked_at": None,
+            "times_cooked": 0,
+            "ratings": [],
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        meal_card_id = f"meal_{uuid4().hex}"
+        meal_card = {
+            "id": meal_card_id,
+            "recipe_id": recipe_id,
+            "status": STATUS_ACTIVE,
+            "placement": "backlog",
+            "position": self._next_position("backlog"),
+            "servings": servings,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        self.store.data["recipes"][recipe_id] = recipe
+        self.store.data["meal_cards"][meal_card_id] = meal_card
+        await self.store.async_save()
+
+        return meal_card

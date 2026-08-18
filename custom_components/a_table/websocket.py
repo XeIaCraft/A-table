@@ -34,6 +34,9 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_toggle_shopping_item)
     websocket_api.async_register_command(hass, websocket_clear_shopping_checked)
     websocket_api.async_register_command(hass, websocket_analyze_tastes)
+    websocket_api.async_register_command(hass, websocket_regenerate_proposal)
+    websocket_api.async_register_command(hass, websocket_export_shopping_list)
+    websocket_api.async_register_command(hass, websocket_import_recipe)
 
 
 @callback
@@ -510,3 +513,79 @@ async def websocket_analyze_tastes(
         return
 
     connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/regenerate_proposal",
+        vol.Required("draft_id"): str,
+        vol.Required("index"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    }
+)
+@websocket_api.async_response
+async def websocket_regenerate_proposal(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Remplace une seule proposition d'un brouillon via l'IA."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        proposal = await coordinator.async_regenerate_proposal(
+            draft_id=msg["draft_id"],
+            index=msg["index"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], proposal)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/export_shopping_list",
+        vol.Required("recipe_ids"): [str],
+    }
+)
+@websocket_api.async_response
+async def websocket_export_shopping_list(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Marque des recettes comme déjà exportées vers la liste de tâches."""
+    coordinator = _get_coordinator(hass)
+    await coordinator.async_export_shopping_list(msg["recipe_ids"])
+    connection.send_result(msg["id"], coordinator.get_data())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/import_recipe",
+        vol.Optional("text"): str,
+        vol.Optional("media_content_id"): str,
+        vol.Optional("media_content_type"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_import_recipe(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Structure une recette (texte et/ou photo) via l'IA et l'ajoute au backlog."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        card = await coordinator.async_import_recipe(
+            text=msg.get("text"),
+            media_content_id=msg.get("media_content_id"),
+            media_content_type=msg.get("media_content_type"),
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], card)

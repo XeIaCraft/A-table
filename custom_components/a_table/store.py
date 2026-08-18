@@ -20,7 +20,10 @@ DEFAULT_DATA: dict[str, Any] = {
     "drafts": {},
     "temporary_ingredients": [],
     "shopping_list_checked": {},
+    "shopping_list_exported_recipe_ids": [],
     "preferences": {
+        "ai_task_entity_id": "ai_task.google_ai_task",
+        "todo_entity_id": None,
         "default_servings": 2,
         "default_recipe_count": 6,
         "appetite": "normal",  # low, normal, high
@@ -58,6 +61,9 @@ DEFAULT_DATA: dict[str, Any] = {
         "max_favorites": 2,
         "max_recurrence": 1,  # max times a similar dish can appear (including history)
         "min_new_recipes_pct": 90,  # target % of new recipes
+        "max_repeat_protein": 2,  # max proposals sharing the same main protein
+        "max_repeat_starch": 2,  # max proposals sharing the same main starch
+        "max_repeat_vegetable": 2,  # max proposals sharing the same main vegetable
     },
 }
 
@@ -111,6 +117,8 @@ class ATableStore:
         self.data.setdefault("history", [])
         if not isinstance(self.data.get("shopping_list_checked"), dict):
             self.data["shopping_list_checked"] = {}
+        if not isinstance(self.data.get("shopping_list_exported_recipe_ids"), list):
+            self.data["shopping_list_exported_recipe_ids"] = []
 
         prefs = self.data["preferences"]
         for list_key in ("liked_ingredients", "disliked_ingredients", "objectives", "diets", "allergies", "available_equipment"):

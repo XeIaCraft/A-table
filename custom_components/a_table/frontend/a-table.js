@@ -286,77 +286,8 @@ class ATableCard extends HTMLElement {
     </div>`;
   }
 
-  _plannedCards() {
-    return Object.values(this._data?.meal_cards || {}).filter(
-      (card) => card.status === "active" && card.placement !== "backlog"
-    );
-  }
-
-  _weekSummaryHTML() {
-    const cards = this._plannedCards();
-    if (!cards.length) return "";
-
-    const prefs = this._data?.preferences || {};
-    const macroTarget = prefs.macro_ratios || { protein_pct: 30, carb_pct: 45, fat_pct: 25 };
-    const budgetTarget = prefs.budget_per_serving;
-
-    let kcalSum = 0, kcalCount = 0;
-    let pSum = 0, cSum = 0, fSum = 0, macroCount = 0;
-    let costSum = 0, costCount = 0;
-
-    cards.forEach((card) => {
-      const recipe = this._data?.recipes?.[card.recipe_id];
-      if (!recipe) return;
-      const nutrition = recipe.nutrition || {};
-      if (Number.isFinite(nutrition.kcal)) {
-        kcalSum += nutrition.kcal;
-        kcalCount++;
-      }
-      if (Number.isFinite(nutrition.protein_g) && Number.isFinite(nutrition.carb_g) && Number.isFinite(nutrition.fat_g)) {
-        pSum += nutrition.protein_g * 4;
-        cSum += nutrition.carb_g * 4;
-        fSum += nutrition.fat_g * 9;
-        macroCount++;
-      }
-      if (Number.isFinite(recipe.price_per_serving)) {
-        costSum += recipe.price_per_serving * (card.servings || recipe.servings || 1);
-        costCount++;
-      }
-    });
-
-    const avgKcal = kcalCount ? Math.round(kcalSum / kcalCount) : null;
-    const macroTotal = pSum + cSum + fSum;
-    const macroActual = macroTotal
-      ? { protein_pct: Math.round((pSum / macroTotal) * 100), carb_pct: Math.round((cSum / macroTotal) * 100), fat_pct: Math.round((fSum / macroTotal) * 100) }
-      : null;
-
-    const macroBar = macroActual
-      ? `<div class="macro-bar">
-          <span style="width:${macroActual.protein_pct}%;background:var(--primary-color,#4f98a3)" title="Protéines ${macroActual.protein_pct}%"></span>
-          <span style="width:${macroActual.carb_pct}%;background:color-mix(in srgb,var(--primary-color,#4f98a3) 55%,#e3b341)" title="Glucides ${macroActual.carb_pct}%"></span>
-          <span style="width:${macroActual.fat_pct}%;background:#e3b341" title="Lipides ${macroActual.fat_pct}%"></span>
-        </div>
-        <div class="macro-legend">
-          <span><i style="background:var(--primary-color,#4f98a3)"></i>Protéines ${macroActual.protein_pct}%</span>
-          <span><i style="background:color-mix(in srgb,var(--primary-color,#4f98a3) 55%,#e3b341)"></i>Glucides ${macroActual.carb_pct}%</span>
-          <span><i style="background:#e3b341"></i>Lipides ${macroActual.fat_pct}%</span>
-        </div>
-        <div class="macro-target">Cible : ${macroTarget.protein_pct}% / ${macroTarget.carb_pct}% / ${macroTarget.fat_pct}%</div>`
-      : `<p class="summary-empty">Nutrition non renseignée pour les repas planifiés.</p>`;
-
-    const costLine = costCount
-      ? `<strong>${costSum.toFixed(2)} €</strong><span>${budgetTarget != null ? `cible ≈ ${(budgetTarget * cards.reduce((s, c) => s + (c.servings || 1), 0)).toFixed(2)} €` : "coût total estimé"}</span>`
-      : `<strong>–</strong><span>prix non renseigné</span>`;
-
-    return `<section class="summary">
-      <header class="section-head"><span>${icon("chart")}Résumé de la semaine</span></header>
-      <div class="summary-grid">
-        <div class="summary-stat"><strong>${cards.length}</strong><span>repas planifiés</span></div>
-        <div class="summary-stat"><strong>${avgKcal ?? "–"}</strong><span>kcal / repas en moyenne</span></div>
-        <div class="summary-stat">${costLine}</div>
-      </div>
-      ${macroBar}
-    </section>`;
+  _activeMealCards() {
+    return Object.values(this._data?.meal_cards || {}).filter((card) => card.status === "active");
   }
 
   _render() {
@@ -401,14 +332,16 @@ class ATableCard extends HTMLElement {
       .icon-btn:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 16%,var(--at-surface-2))}
       .icon-btn.is-active,.icon-btn .icon-star.is-active{color:var(--primary-color,#4f98a3)}
       .fav-btn.is-active{color:#e3b341}
-      .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+      .top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
       .generator{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);margin-bottom:var(--at-space-4)}
       .generator strong{font-size:14px;font-weight:750}
       .generator-actions,.counter{display:flex;align-items:center;gap:8px}
       .counter button{width:38px;height:38px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:transparent;color:inherit;font-size:19px}
       .counter button:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 12%,transparent);border-color:var(--primary-color,#4f98a3)}
       .counter span{width:28px;text-align:center;font-weight:750;font-variant-numeric:tabular-nums}
-      .generate,.add,.save{min-height:40px;border:0;border-radius:var(--at-radius-sm);padding:0 14px;background:var(--primary-color,#4f98a3);color:var(--text-primary-color,#fff);font-weight:750;box-shadow:0 2px 10px color-mix(in srgb,var(--primary-color,#4f98a3) 35%,transparent)}
+      .generate,.add,.save{min-height:40px;border:0;border-radius:var(--at-radius-sm);padding:0 14px;background:var(--primary-color,#4f98a3);color:var(--text-primary-color,#fff);font-weight:750;box-shadow:0 2px 10px color-mix(in srgb,var(--primary-color,#4f98a3) 35%,transparent);display:inline-flex;align-items:center;justify-content:center;gap:7px}
+      .cancel{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+      .generate .icon,.add .icon,.save .icon,.cancel .icon{width:15px;height:15px}
       .generate:hover,.add:hover,.save:hover{filter:brightness(1.08)}
       .save:disabled{opacity:.5;cursor:not-allowed;filter:none;box-shadow:none}
       .temp-section{margin-bottom:var(--at-space-4);padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:color-mix(in srgb,var(--card-background-color,#171a20) 92%,var(--primary-text-color,#fff))}
@@ -457,21 +390,6 @@ class ATableCard extends HTMLElement {
       .skeleton{border-radius:var(--at-radius-md);background:linear-gradient(100deg,var(--at-surface-1) 30%,var(--at-surface-2) 50%,var(--at-surface-1) 70%);background-size:200% 100%;animation:at-shimmer 1.4s ease-in-out infinite}
       .skeleton-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
       @keyframes at-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-      .summary{padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);margin-bottom:var(--at-space-4)}
-      .summary .section-head{margin-bottom:12px}
-      .summary .section-head span{display:flex;align-items:center;gap:6px}
-      .summary .section-head .icon{width:14px;height:14px}
-      .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:12px}
-      .summary-stat{display:flex;flex-direction:column;gap:2px}
-      .summary-stat strong{font-size:20px;font-weight:800;letter-spacing:-.01em}
-      .summary-stat span{font-size:11px;color:var(--secondary-text-color,#aeb7c5)}
-      .summary-empty{font-size:12px;color:var(--secondary-text-color,#aeb7c5);margin:0}
-      .macro-bar{display:flex;width:100%;height:8px;border-radius:99px;overflow:hidden;background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent)}
-      .macro-bar span{height:100%;transition:width 300ms var(--at-ease)}
-      .macro-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;color:var(--secondary-text-color,#aeb7c5)}
-      .macro-legend span{display:flex;align-items:center;gap:5px}
-      .macro-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
-      .macro-target{margin-top:4px;font-size:11px;color:var(--secondary-text-color,#aeb7c5)}
       .add-row{display:flex;justify-content:flex-end;margin-top:var(--at-space-4)}
       .overlay{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.48);animation:at-fade 180ms var(--at-ease)}
       .dialog{width:min(720px,100%);max-height:calc(100dvh - 32px);overflow:auto;border:1px solid var(--at-border);border-radius:var(--at-radius-lg);padding:20px;background:var(--card-background-color,#171a20);box-shadow:0 22px 56px rgba(0,0,0,.38);animation:at-pop 200ms var(--at-ease)}
@@ -503,7 +421,11 @@ class ATableCard extends HTMLElement {
       .state{padding:48px 12px;text-align:center;color:var(--secondary-text-color,#aeb7c5)}
       .state.error{color:var(--error-color,#e57373)}
       .proposal{padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);margin-bottom:10px}
-      .proposal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+      .proposal-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+      .proposal-head .proposal-title{flex:1}
+      .proposal-replace{width:32px;height:32px;flex-shrink:0}
+      .proposal-replace .icon{width:15px;height:15px}
+      .proposal.is-loading{opacity:.5;pointer-events:none}
       .proposal-head input[type="checkbox"]{width:20px;height:20px}
       .proposal-title{font-weight:700;font-size:14px}
       .proposal-meta{display:flex;flex-wrap:wrap;gap:8px;color:var(--secondary-text-color,#aeb7c5);font-size:11px}
@@ -532,17 +454,20 @@ class ATableCard extends HTMLElement {
       .tab-content{display:none;animation:at-fade 160ms var(--at-ease)}
       .tab-content.active{display:block}
       .readonly-input{pointer-events:none;opacity:0.7}
-      .hidden{display:none}
+      .hidden{display:none !important}
       .dialog input[type="range"]{-webkit-appearance:none;appearance:none;height:28px;background:transparent;padding:0;min-height:auto;border:0}
       input[type="range"]::-webkit-slider-runnable-track{height:5px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 16%,transparent)}
       input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6.5px;border-radius:50%;background:var(--primary-color,#4f98a3);border:3px solid var(--card-background-color,#171a20);box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
       input[type="range"]::-moz-range-track{height:5px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 16%,transparent)}
       input[type="range"]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--primary-color,#4f98a3);border:3px solid var(--card-background-color,#171a20);box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
       .dialog input[type="checkbox"],.dialog input[type="radio"]{width:16px;min-height:16px;height:16px;flex-shrink:0;padding:0}
-      .equipment-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;font-size:13px}
-      .equipment-grid-head{font-weight:750;color:var(--secondary-text-color,#aeb7c5);font-size:11px;text-transform:uppercase;padding:0 0 8px}
-      .equipment-row{display:contents}
-      .equipment-cell{display:flex;align-items:center;gap:6px;padding:7px 4px;border-bottom:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 6%,transparent)}
+      .toggle-group{display:flex;flex-wrap:wrap;gap:8px}
+      .toggle-chip{position:relative;display:inline-flex;align-items:center;padding:8px 15px;border-radius:99px;border:1px solid var(--at-border);background:var(--at-surface-1);font-size:13px;font-weight:600;color:var(--secondary-text-color,#aeb7c5);cursor:pointer;transition:background-color 150ms var(--at-ease),border-color 150ms var(--at-ease),color 150ms var(--at-ease)}
+      .toggle-chip input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+      .toggle-chip:hover{border-color:color-mix(in srgb,var(--primary-color,#4f98a3) 45%,var(--at-border))}
+      .toggle-chip:has(input:checked){background:var(--primary-color,#4f98a3);border-color:transparent;color:var(--text-primary-color,#fff)}
+      .toggle-chip:has(input:disabled){opacity:.4;cursor:not-allowed}
+      .toggle-chip:has(input:focus-visible){outline:2px solid var(--primary-color,#4f98a3);outline-offset:2px}
       .library-search{display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:var(--at-surface-1);margin-top:var(--at-space-3)}
       .library-search .icon{color:var(--secondary-text-color,#aeb7c5)}
       .library-search input{border:0;background:transparent;padding-left:0}
@@ -585,12 +510,6 @@ class ATableCard extends HTMLElement {
       .suggestion-chip{border:1px dashed var(--at-border);background:transparent;cursor:pointer}
       .suggestion-chip .icon{width:11px;height:11px}
       .suggestion-chip:hover{border-color:var(--primary-color,#4f98a3);color:var(--primary-color,#4f98a3)}
-      @media(max-width:960px){
-        .equipment-grid{grid-template-columns:1fr}
-        .equipment-grid-head:nth-child(2){display:none}
-        .equipment-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:6px}
-        .equipment-row .equipment-cell:last-child{border-bottom:none;padding-left:0}
-      }
       @media(max-width:680px){
         .app{padding:14px;border-radius:14px}
         .generator{flex-wrap:wrap}
@@ -626,7 +545,7 @@ class ATableCard extends HTMLElement {
                 <button class="add-temp" type="button" data-add-temp>＋ Ajouter un aliment</button>
               </header>
               <div class="temp-list">
-                ${tempIngs.length ? tempIngs.map((ing) => this._tempIngredientHTML(ing)).join("") : this._emptyHTML("Aucun aliment temporaire.")}
+                ${tempIngs.length ? tempIngs.map((ing) => this._tempIngredientHTML(ing)).join("") : this._emptyHTML("Aucun aliment.")}
               </div>
             </section>
             <section class="generator">
@@ -640,7 +559,6 @@ class ATableCard extends HTMLElement {
                 <button class="generate" type="button">Générer</button>
               </div>
             </section>
-            ${this._weekSummaryHTML()}
             <section class="backlog">
               <header class="section-head">
                 <span>À cuisiner</span>
@@ -1010,10 +928,11 @@ class ATableCard extends HTMLElement {
                 const price = p.price_per_serving != null
                   ? `<div class="proposal-meta"><span>${this._esc(p.price_per_serving)} € / portion</span></div>`
                   : "";
-                return `<div class="proposal">
+                return `<div class="proposal" data-proposal-index="${i}">
                   <div class="proposal-head">
                     <input type="checkbox" data-proposal-check="${i}" checked>
                     <strong class="proposal-title">${this._esc(p.title || "Recette sans titre")}</strong>
+                    <button class="icon-btn proposal-replace" type="button" data-replace-proposal="${i}" aria-label="Remplacer cette proposition" title="Remplacer cette proposition">${icon("refresh")}</button>
                   </div>
                   <div class="proposal-meta">
                     <span>${this._esc(p.cooking_minutes || "–")} min</span>
@@ -1047,21 +966,19 @@ class ATableCard extends HTMLElement {
     } else if (this._modal.type === "add") {
       overlay.innerHTML = `<form class="dialog" novalidate>
         <header class="dialog-top">
-          <h2>Ajouter une recette <span style="font-size:12px;color:var(--secondary-text-color,#aeb7c5);font-weight:normal">(Work in progress)</span></h2>
+          <h2>Ajouter une recette</h2>
           <button class="close" type="button">${icon("close")}</button>
         </header>
-        <label>Nom de la recette
-          <input name="title" required autofocus placeholder="Ex. Curry de courgettes">
+        <p class="taste-hint">Colle le texte d'une recette et/ou ajoute une photo. L'IA la met au format À table (ingrédients, étapes, nutrition estimée).</p>
+        <label>Texte de la recette (facultatif si tu ajoutes une photo)
+          <textarea name="recipe_text" placeholder="Colle ici le texte d'une recette, par exemple copié depuis un site." rows="6"></textarea>
         </label>
-        <label>Portions
-          <input name="servings" type="number" min="1" max="20" value="2">
-        </label>
-        <label>Temps total (minutes)
-          <input name="cooking_minutes" type="number" min="0" max="1440" placeholder="Ex. 25">
+        <label>Photo (facultatif)
+          <input name="recipe_photo" type="file" accept="image/*">
         </label>
         <footer class="actions">
           <button class="cancel" type="button">Annuler</button>
-          <button class="save" type="submit">Ajouter</button>
+          <button class="save" type="submit"><span data-import-label>Importer avec l'IA</span></button>
         </footer>
       </form>`;
     } else if (this._modal.type === "add_temp") {
@@ -1204,24 +1121,72 @@ class ATableCard extends HTMLElement {
           this._toast(error?.message || "Validation impossible.", "error");
         }
       });
+      overlay.querySelectorAll("[data-replace-proposal]").forEach((btn) => {
+        btn.addEventListener("click", async (event) => {
+          const index = Number(event.currentTarget.dataset.replaceProposal);
+          const draftId = this._modal?.draft_id;
+          const proposalEl = overlay.querySelector(`[data-proposal-index="${index}"]`);
+          proposalEl?.classList.add("is-loading");
+          btn.disabled = true;
+          try {
+            await this._ws({ type: "a_table/regenerate_proposal", draft_id: draftId, index });
+            await this._load();
+          } catch (error) {
+            this._toast(error?.message || "Remplacement impossible.", "error");
+            proposalEl?.classList.remove("is-loading");
+            btn.disabled = false;
+          }
+        });
+      });
     } else if (this._modal.type === "add") {
       overlay.querySelector("form")?.addEventListener("submit", async (event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
-        const title = String(data.get("title") || "").trim();
-        if (!title) return;
-        const minutes = String(data.get("cooking_minutes") || "").trim();
+        const text = String(data.get("recipe_text") || "").trim();
+        const file = data.get("recipe_photo");
+        const hasFile = file && file.size > 0;
+        if (!text && !hasFile) {
+          this._toast("Ajoute un texte ou une photo de recette.", "error");
+          return;
+        }
+
+        const submitBtn = overlay.querySelector('button[type="submit"]');
+        const label = overlay.querySelector("[data-import-label]");
+        if (submitBtn) submitBtn.disabled = true;
+
         try {
+          let media_content_id = null;
+          let media_content_type = null;
+          if (hasFile) {
+            if (label) label.textContent = "Envoi de la photo…";
+            const uploadData = new FormData();
+            uploadData.append("media_content_id", "media-source://media_source/local/");
+            uploadData.append("file", file);
+            const resp = await this._hass.fetchWithAuth("/api/media_source/local_source/upload", {
+              method: "POST",
+              body: uploadData,
+            });
+            if (!resp.ok) {
+              throw new Error("Envoi de la photo impossible (" + resp.status + ").");
+            }
+            const uploadResult = await resp.json();
+            media_content_id = uploadResult.media_content_id;
+            media_content_type = file.type || "image/jpeg";
+          }
+
+          if (label) label.textContent = "Analyse en cours…";
           await this._ws({
-            type: "a_table/add_recipe",
-            title,
-            servings: Number(data.get("servings") || 2),
-            ...(minutes ? { cooking_minutes: Number(minutes) } : {}),
+            type: "a_table/import_recipe",
+            ...(text ? { text } : {}),
+            ...(media_content_id ? { media_content_id, media_content_type } : {}),
           });
           this._closeModal();
           await this._load();
+          this._toast("Recette importée et ajoutée à À cuisiner.", "success");
         } catch (error) {
-          this._toast(error?.message || "Ajout impossible.", "error");
+          this._toast(error?.message || "Import impossible.", "error");
+          if (submitBtn) submitBtn.disabled = false;
+          if (label) label.textContent = "Importer avec l'IA";
         }
       });
     } else if (this._modal.type === "add_temp") {
@@ -1308,9 +1273,15 @@ class ATableCard extends HTMLElement {
 
   // ---- Library modal (Mes recettes) ---------------------------------------
 
+  _libraryEligibleRecipes() {
+    return Object.values(this._data?.recipes || {}).filter(
+      (r) => !r.is_archived && (r.is_favorite || r.source?.kind === "personal_manual")
+    );
+  }
+
   _libraryRecipes() {
     const state = this._modal;
-    const all = Object.values(this._data?.recipes || {}).filter((r) => !r.is_archived);
+    const all = this._libraryEligibleRecipes();
     const search = (state.search || "").trim().toLowerCase();
     return all
       .filter((r) => !search || (r.title || "").toLowerCase().includes(search))
@@ -1321,7 +1292,7 @@ class ATableCard extends HTMLElement {
 
   _libraryModalHTML() {
     const state = this._modal;
-    const allTags = Array.from(new Set(Object.values(this._data?.recipes || {}).flatMap((r) => r.tags || []))).sort();
+    const allTags = Array.from(new Set(this._libraryEligibleRecipes().flatMap((r) => r.tags || []))).sort();
     const results = this._libraryRecipes();
 
     return `<section class="dialog dialog-lg">
@@ -1475,12 +1446,19 @@ class ATableCard extends HTMLElement {
 
   // ---- Shopping list modal -------------------------------------------
 
+  _shoppingRecipeIds() {
+    const exported = new Set(this._data?.shopping_list_exported_recipe_ids || []);
+    return this._activeMealCards()
+      .map((card) => card.recipe_id)
+      .filter((recipeId) => recipeId && this._data?.recipes?.[recipeId] && !exported.has(recipeId));
+  }
+
   _shoppingItems() {
-    const cards = this._plannedCards();
+    const recipeIds = this._shoppingRecipeIds();
     const byKey = new Map();
 
-    cards.forEach((card) => {
-      const recipe = this._data?.recipes?.[card.recipe_id];
+    recipeIds.forEach((recipeId) => {
+      const recipe = this._data?.recipes?.[recipeId];
       if (!recipe) return;
       (recipe.ingredients || []).forEach((ing) => {
         const name = String(ing.name || "").trim();
@@ -1533,22 +1511,60 @@ class ATableCard extends HTMLElement {
             </div>
           </div>`)
           .join("")
-      : this._emptyHTML("Planifie des repas sur la semaine pour générer la liste de courses.");
+      : this._emptyHTML("Rien à acheter : planifie ou ajoute des repas à cuisiner.");
+
+    const todoEntityId = this._data?.preferences?.todo_entity_id;
+    const transferHint = todoEntityId
+      ? ""
+      : `<p class="taste-hint">Configure une liste de tâches dans Paramètres → Intégrations pour activer le transfert.</p>`;
 
     return `<section class="dialog">
       <header class="dialog-top">
         <h2>Liste de courses</h2>
         <button class="close" type="button">${icon("close")}</button>
       </header>
+      <p class="taste-hint">Coche un article si tu l'as déjà en stock : il ne sera pas transféré vers la liste de tâches.</p>
       <div class="shopping-list" data-shopping-list>${body}</div>
+      ${transferHint}
       <footer class="actions">
-        ${items.length ? `<button class="cancel" type="button" data-clear-shopping>Tout décocher</button>` : ""}
-        <button class="save" type="button" data-close-shopping>Fermer</button>
+        ${items.length ? `<button class="cancel" type="button" data-clear-shopping>Recommencer la liste</button>` : ""}
+        <button class="save" type="button" data-transfer-shopping ${todoEntityId && items.length ? "" : "disabled"}>${icon("basket")}Transférer vers la liste de tâches</button>
+        <button class="cancel" type="button" data-close-shopping>Fermer</button>
       </footer>
     </section>`;
   }
 
+  async _transferShoppingList(overlay) {
+    const todoEntityId = this._data?.preferences?.todo_entity_id;
+    if (!todoEntityId) return;
+
+    const checked = this._data?.shopping_list_checked || {};
+    const items = this._shoppingItems().filter((item) => !checked[item.key]);
+    if (!items.length) {
+      this._toast("Aucun article à transférer (tout est déjà en stock).");
+      return;
+    }
+
+    const btn = overlay.querySelector("[data-transfer-shopping]");
+    if (btn) btn.disabled = true;
+
+    try {
+      for (const item of items) {
+        const qty = item.uncertain || item.quantity == null ? "" : `${item.quantity} ${item.unit}`.trim();
+        const label = [qty, item.name].filter(Boolean).join(" ").trim();
+        await this._hass.callService("todo", "add_item", { entity_id: todoEntityId, item: label });
+      }
+      await this._ws({ type: "a_table/export_shopping_list", recipe_ids: this._shoppingRecipeIds() });
+      await this._load();
+      this._toast(`${items.length} article(s) transféré(s).`, "success");
+    } catch (error) {
+      this._toast(error?.message || "Transfert impossible.", "error");
+      if (btn) btn.disabled = false;
+    }
+  }
+
   _bindShoppingModal(overlay) {
+    overlay.querySelector("[data-transfer-shopping]")?.addEventListener("click", () => this._transferShoppingList(overlay));
     overlay.querySelectorAll("[data-shopping-toggle]").forEach((input) => {
       input.addEventListener("change", async (event) => {
         const key = event.currentTarget.dataset.shoppingToggle;
@@ -1564,7 +1580,7 @@ class ATableCard extends HTMLElement {
       });
     });
     overlay.querySelector("[data-clear-shopping]")?.addEventListener("click", async () => {
-      if (!confirm("Décocher tous les articles de la liste de courses ?")) return;
+      if (!confirm("Recommencer la liste : décocher les articles \"déjà en stock\" et faire réapparaître les recettes déjà transférées ?")) return;
       try {
         await this._ws({ type: "a_table/clear_shopping_checked" });
         this._data.shopping_list_checked = {};
@@ -1592,6 +1608,20 @@ class ATableCard extends HTMLElement {
     `;
   }
 
+  _entityOptionsHTML(prefix, selected) {
+    const states = this._hass?.states || {};
+    const ids = Object.keys(states).filter((id) => id.startsWith(prefix)).sort();
+    if (!ids.length) {
+      return `<option value="${this._esc(selected || "")}" selected>${this._esc(selected || "Aucune entité trouvée")}</option>`;
+    }
+    return ids
+      .map((id) => {
+        const label = states[id]?.attributes?.friendly_name || id;
+        return `<option value="${this._esc(id)}" ${id === selected ? "selected" : ""}>${this._esc(label)}</option>`;
+      })
+      .join("");
+  }
+
   _settingsModalHTML() {
     const draft = this._settingsDraft;
     const prefs = draft.preferences;
@@ -1602,7 +1632,6 @@ class ATableCard extends HTMLElement {
     const liked = prefs.liked_ingredients || [];
     const disliked = prefs.disliked_ingredients || [];
     const availableEq = prefs.available_equipment || [];
-    const preferredEq = prefs.preferred_equipment || "";
     const objectives = prefs.objectives || [];
     const sources = prefs.recipe_sources || {};
     const macros = prefs.macro_ratios || { protein_pct: 30, carb_pct: 45, fat_pct: 25 };
@@ -1625,6 +1654,7 @@ class ATableCard extends HTMLElement {
         <button type="button" class="tab ${tab === "tastes" ? "active" : ""}" data-tab="tastes">Goûts</button>
         <button type="button" class="tab ${tab === "equipment" ? "active" : ""}" data-tab="equipment">Équipements</button>
         <button type="button" class="tab ${tab === "objectives" ? "active" : ""}" data-tab="objectives">Objectifs</button>
+        <button type="button" class="tab ${tab === "integrations" ? "active" : ""}" data-tab="integrations">Intégrations</button>
         <button type="button" class="tab ${tab === "advanced" ? "active" : ""}" data-tab="advanced">Avancé</button>
       </div>
 
@@ -1707,11 +1737,11 @@ class ATableCard extends HTMLElement {
       <div class="tab-content ${tab === "diet" ? "active" : ""}" data-tab-content="diet">
         <div class="settings-section">
           <h3>Régimes</h3>
-          <div class="checkbox-group">
+          <div class="toggle-group">
             ${DIET_OPTIONS.map((opt) => `
-              <label class="checkbox-item">
+              <label class="toggle-chip">
                 <input type="checkbox" name="diets" value="${opt.value}" ${diets.includes(opt.value) ? "checked" : ""} ${opt.value === "everything" ? "data-diet-main" : ""}>
-                ${opt.label}
+                <span>${opt.label}</span>
               </label>
             `).join("")}
           </div>
@@ -1722,11 +1752,11 @@ class ATableCard extends HTMLElement {
 
         <div class="settings-section">
           <h3>Allergies & intolérances</h3>
-          <div class="checkbox-group">
+          <div class="toggle-group">
             ${ALLERGY_OPTIONS.map((opt) => `
-              <label class="checkbox-item">
+              <label class="toggle-chip">
                 <input type="checkbox" name="allergies" value="${opt.value}" ${allergies.includes(opt.value) ? "checked" : ""}>
-                ${opt.label}
+                <span>${opt.label}</span>
               </label>
             `).join("")}
           </div>
@@ -1768,28 +1798,14 @@ class ATableCard extends HTMLElement {
 
       <div class="tab-content ${tab === "equipment" ? "active" : ""}" data-tab-content="equipment">
         <div class="settings-section">
-          <h3>Équipements</h3>
-          <div class="equipment-grid">
-            <div class="equipment-grid-head">J'ai</div>
-            <div class="equipment-grid-head">À privilégier</div>
-            ${EQUIPMENT_OPTIONS.map((opt) => {
-              const has = availableEq.includes(opt.value);
-              const isPreferred = preferredEq === opt.value;
-              return `<div class="equipment-row">
-                <div class="equipment-cell">
-                  <label class="checkbox-item">
-                    <input type="checkbox" name="available_equipment" value="${opt.value}" data-equip-available="${opt.value}" ${has ? "checked" : ""}>
-                    ${opt.label}
-                  </label>
-                </div>
-                <div class="equipment-cell">
-                  <label class="checkbox-item ${has ? "" : "disabled"}">
-                    <input type="radio" name="preferred_equipment_radio" value="${opt.value}" data-equip-preferred="${opt.value}" ${isPreferred ? "checked" : ""} ${has ? "" : "disabled"}>
-                    Oui
-                  </label>
-                </div>
-              </div>`;
-            }).join("")}
+          <h3>Équipements disponibles</h3>
+          <div class="toggle-group">
+            ${EQUIPMENT_OPTIONS.map((opt) => `
+              <label class="toggle-chip">
+                <input type="checkbox" name="available_equipment" value="${opt.value}" ${availableEq.includes(opt.value) ? "checked" : ""}>
+                <span>${opt.label}</span>
+              </label>
+            `).join("")}
           </div>
         </div>
       </div>
@@ -1797,17 +1813,37 @@ class ATableCard extends HTMLElement {
       <div class="tab-content ${tab === "objectives" ? "active" : ""}" data-tab-content="objectives">
         <div class="settings-section">
           <h3>Objectifs (max ${MAX_OBJECTIVES})</h3>
-          <div class="checkbox-group" data-objectives-group>
+          <div class="toggle-group" data-objectives-group>
             ${OBJECTIVE_OPTIONS.map((opt) => {
               const checked = objectives.includes(opt.value);
               const disabled = !checked && objectivesLocked;
-              return `<label class="checkbox-item ${disabled ? "disabled" : ""}">
+              return `<label class="toggle-chip">
                 <input type="checkbox" name="objectives" value="${opt.value}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>
-                ${opt.label}
+                <span>${opt.label}</span>
               </label>`;
             }).join("")}
           </div>
           <div data-objectives-hint style="font-size:12px;color:var(--secondary-text-color,#aeb7c5);margin-top:8px">${objectivesLocked ? "Maximum " + MAX_OBJECTIVES + " objectifs." : ""}</div>
+        </div>
+      </div>
+
+      <div class="tab-content ${tab === "integrations" ? "active" : ""}" data-tab-content="integrations">
+        <div class="settings-section">
+          <h3>Intelligence artificielle</h3>
+          <label>Entité IA utilisée pour les générations
+            <select name="ai_task_entity_id" data-ai-entity-select>
+              ${this._entityOptionsHTML("ai_task.", prefs.ai_task_entity_id)}
+            </select>
+          </label>
+        </div>
+        <div class="settings-section">
+          <h3>Liste de courses</h3>
+          <label>Liste de tâches pour le transfert des courses
+            <select name="todo_entity_id" data-todo-entity-select>
+              <option value="">Aucune</option>
+              ${this._entityOptionsHTML("todo.", prefs.todo_entity_id)}
+            </select>
+          </label>
         </div>
       </div>
 
@@ -1825,6 +1861,17 @@ class ATableCard extends HTMLElement {
           <label>Min nouvelles recettes (%)
             <input name="min_new_recipes_pct" type="number" min="0" max="100" value="${rules.min_new_recipes_pct ?? 90}">
           </label>
+          <div class="row">
+            <label>Max répétition protéine principale
+              <input name="max_repeat_protein" type="number" min="0" value="${rules.max_repeat_protein ?? 2}">
+            </label>
+            <label>Max répétition féculent principal
+              <input name="max_repeat_starch" type="number" min="0" value="${rules.max_repeat_starch ?? 2}">
+            </label>
+            <label>Max répétition légume principal
+              <input name="max_repeat_vegetable" type="number" min="0" value="${rules.max_repeat_vegetable ?? 2}">
+            </label>
+          </div>
           <h3 style="margin-top:16px">Répartition cible (G/L/P)</h3>
           <div class="row">
             <label>Protéines (%)
@@ -2011,22 +2058,6 @@ class ATableCard extends HTMLElement {
     toggleOtherDiet();
     toggleOtherAllergy();
 
-    // Equipment: two-column grid, preferred only if available, at most one preferred
-    overlay.querySelectorAll("[data-equip-available]").forEach((cb) => {
-      cb.addEventListener("change", () => {
-        const value = cb.dataset.equipAvailable;
-        const radio = overlay.querySelector(`[data-equip-preferred="${value}"]`);
-        const radioLabel = radio?.closest("label");
-        if (radio) {
-          radio.disabled = !cb.checked;
-          radioLabel?.classList.toggle("disabled", !cb.checked);
-          if (!cb.checked && radio.checked) {
-            radio.checked = false;
-          }
-        }
-      });
-    });
-
     // History sliders live display
     const historySlider = overlay.querySelector("[name='history_days_for_generation']");
     const historyDisplay = overlay.querySelector("[data-history-display]");
@@ -2049,9 +2080,7 @@ class ATableCard extends HTMLElement {
     const enforceObjectivesLimit = () => {
       const checkedCount = Array.from(objectivesCheckboxes).filter((cb) => cb.checked).length;
       objectivesCheckboxes.forEach((cb) => {
-        const disable = !cb.checked && checkedCount >= MAX_OBJECTIVES;
-        cb.disabled = disable;
-        cb.closest("label")?.classList.toggle("disabled", disable);
+        cb.disabled = !cb.checked && checkedCount >= MAX_OBJECTIVES;
       });
       if (objectivesHint) {
         objectivesHint.textContent = checkedCount >= MAX_OBJECTIVES ? `Maximum ${MAX_OBJECTIVES} objectifs.` : "";
@@ -2133,10 +2162,6 @@ class ATableCard extends HTMLElement {
     }
 
     const availableEquipment = data.getAll("available_equipment");
-    let preferredEquipment = String(data.get("preferred_equipment_radio") || "") || null;
-    if (preferredEquipment && !availableEquipment.includes(preferredEquipment)) {
-      preferredEquipment = null;
-    }
 
     const macros = {
       protein_pct: Number(data.get("protein_pct") || 30),
@@ -2155,8 +2180,9 @@ class ATableCard extends HTMLElement {
       liked_ingredients: prefs.liked_ingredients || [],
       disliked_ingredients: prefs.disliked_ingredients || [],
       available_equipment: availableEquipment,
-      preferred_equipment: preferredEquipment,
       objectives,
+      ai_task_entity_id: String(data.get("ai_task_entity_id") || "") || prefs.ai_task_entity_id,
+      todo_entity_id: String(data.get("todo_entity_id") || "") || null,
       budget_per_serving: data.get("budget_per_serving") ? Number(data.get("budget_per_serving")) : null,
       grocery_store: String(data.get("grocery_store") || ""),
       time_profile: String(data.get("time_profile") || "normal"),
@@ -2178,6 +2204,9 @@ class ATableCard extends HTMLElement {
       max_favorites: Number(data.get("max_favorites") || 2),
       max_recurrence: Number(data.get("max_recurrence") || 1),
       min_new_recipes_pct: Number(data.get("min_new_recipes_pct") || 90),
+      max_repeat_protein: Number(data.get("max_repeat_protein") || 2),
+      max_repeat_starch: Number(data.get("max_repeat_starch") || 2),
+      max_repeat_vegetable: Number(data.get("max_repeat_vegetable") || 2),
     };
 
     return { preferences, rules };
