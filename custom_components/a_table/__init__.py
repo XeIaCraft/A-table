@@ -12,6 +12,8 @@ from .store import ATableStore
 from .websocket import async_register_websocket_commands
 from .frontend import async_register_frontend
 
+PLATFORMS = ["sensor"]
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configure l'intégration À table."""
@@ -35,11 +37,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_register_websocket_commands(hass)
         hass.data[DOMAIN]["websocket_registered"] = True
 
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Décharge l'intégration À table."""
+    await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
     hass.data[DOMAIN].pop(entry.entry_id, None)
 
     if not hass.data[DOMAIN]:

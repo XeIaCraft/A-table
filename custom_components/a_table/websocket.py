@@ -37,6 +37,13 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_regenerate_proposal)
     websocket_api.async_register_command(hass, websocket_export_shopping_list)
     websocket_api.async_register_command(hass, websocket_import_recipe)
+    websocket_api.async_register_command(hass, websocket_refine_recipe)
+    websocket_api.async_register_command(hass, websocket_refine_proposal)
+    websocket_api.async_register_command(hass, websocket_generate_guest_menu)
+    websocket_api.async_register_command(hass, websocket_regenerate_guest_course)
+    websocket_api.async_register_command(hass, websocket_refine_guest_course)
+    websocket_api.async_register_command(hass, websocket_regenerate_wine_pairings)
+    websocket_api.async_register_command(hass, websocket_dismiss_guest_menu)
 
 
 @callback
@@ -80,6 +87,11 @@ async def websocket_get_data(
             vol.Range(min=0, max=1440),
         ),
         vol.Optional("tags", default=[]): [str],
+        vol.Optional("ingredients", default=[]): [dict],
+        vol.Optional("steps", default=[]): [str],
+        vol.Optional("notes", default=""): str,
+        vol.Optional("nutrition", default={}): dict,
+        vol.Optional("price_per_serving"): vol.Coerce(float),
     }
 )
 @websocket_api.async_response
@@ -88,7 +100,7 @@ async def websocket_add_recipe(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Ajoute une recette minimale."""
+    """Ajoute une recette (minimale ou saisie manuelle complète)."""
     coordinator = _get_coordinator(hass)
 
     try:
@@ -97,6 +109,11 @@ async def websocket_add_recipe(
             servings=msg["servings"],
             cooking_minutes=msg.get("cooking_minutes"),
             tags=msg["tags"],
+            ingredients=msg["ingredients"],
+            steps=msg["steps"],
+            notes=msg["notes"],
+            nutrition=msg["nutrition"],
+            price_per_serving=msg.get("price_per_serving"),
         )
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_input", str(err))
@@ -169,7 +186,7 @@ async def websocket_cook_meal_card(
         vol.Required("type"): "a_table/generate_draft",
         vol.Optional("count", default=6): vol.All(
             vol.Coerce(int),
-            vol.Range(min=1, max=10),
+            vol.Range(min=1, max=7),
         ),
     }
 )
@@ -589,3 +606,188 @@ async def websocket_import_recipe(
         return
 
     connection.send_result(msg["id"], card)
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/refine_recipe",
+        vol.Required("recipe_id"): str,
+        vol.Required("message"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_refine_recipe(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Modifie une recette enregistrée via une consigne libre, en dialogue avec l'IA."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        recipe = await coordinator.async_refine_recipe(
+            recipe_id=msg["recipe_id"],
+            user_message=msg["message"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], recipe)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/refine_proposal",
+        vol.Required("draft_id"): str,
+        vol.Required("index"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Required("message"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_refine_proposal(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Modifie une proposition d'un brouillon via une consigne libre, en dialogue avec l'IA."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        proposal = await coordinator.async_refine_proposal(
+            draft_id=msg["draft_id"],
+            index=msg["index"],
+            user_message=msg["message"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], proposal)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/generate_guest_menu",
+        vol.Required("guests"): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
+        vol.Optional("notes", default=""): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_generate_guest_menu(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Génère un menu invité complet via l'IA."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        menu = await coordinator.async_generate_guest_menu(
+            guests=msg["guests"],
+            notes=msg["notes"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], menu)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/regenerate_guest_course",
+        vol.Required("menu_id"): str,
+        vol.Required("course_key"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_regenerate_guest_course(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Remplace un seul plat d'un menu invité via l'IA."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        menu = await coordinator.async_regenerate_guest_course(
+            menu_id=msg["menu_id"],
+            course_key=msg["course_key"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], menu)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/refine_guest_course",
+        vol.Required("menu_id"): str,
+        vol.Required("course_key"): str,
+        vol.Required("message"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_refine_guest_course(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Ajuste un plat d'un menu invité via une consigne libre, en dialogue avec l'IA."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        menu = await coordinator.async_refine_guest_course(
+            menu_id=msg["menu_id"],
+            course_key=msg["course_key"],
+            message=msg["message"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], menu)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/regenerate_wine_pairings",
+        vol.Required("menu_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_regenerate_wine_pairings(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Régénère les suggestions d'accord mets-vins d'un menu invité."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        menu = await coordinator.async_regenerate_wine_pairings(menu_id=msg["menu_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], menu)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/dismiss_guest_menu",
+        vol.Required("menu_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_dismiss_guest_menu(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Supprime un menu invité."""
+    coordinator = _get_coordinator(hass)
+    await coordinator.async_dismiss_guest_menu(msg["menu_id"])
+    connection.send_result(msg["id"], coordinator.get_data())

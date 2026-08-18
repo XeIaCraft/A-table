@@ -6,6 +6,6 @@
   "documentation": "https://example.invalid/a-table",
   "integration_type": "service",
   "iot_class": "local_push",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "dependencies": ["frontend", "http"]
 }

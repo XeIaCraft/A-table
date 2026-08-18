@@ -21,6 +21,7 @@ DEFAULT_DATA: dict[str, Any] = {
     "temporary_ingredients": [],
     "shopping_list_checked": {},
     "shopping_list_exported_recipe_ids": [],
+    "guest_menus": {},
     "preferences": {
         "ai_task_entity_id": "ai_task.google_ai_task",
         "todo_entity_id": None,
@@ -37,6 +38,7 @@ DEFAULT_DATA: dict[str, Any] = {
         "preferred_equipment": None,  # single value now
         "objectives": [],  # max 3
         "budget_per_serving": None,
+        "target_kcal_per_serving": None,
         "grocery_store": "",  # where user shops
         "time_profile": "normal",  # quick (<=20), normal (<=60), chill (>60)
         "complexity": "free",  # simple, medium, free
@@ -119,6 +121,8 @@ class ATableStore:
             self.data["shopping_list_checked"] = {}
         if not isinstance(self.data.get("shopping_list_exported_recipe_ids"), list):
             self.data["shopping_list_exported_recipe_ids"] = []
+        if not isinstance(self.data.get("guest_menus"), dict):
+            self.data["guest_menus"] = {}
 
         prefs = self.data["preferences"]
         for list_key in ("liked_ingredients", "disliked_ingredients", "objectives", "diets", "allergies", "available_equipment"):

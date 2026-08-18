@@ -63,6 +63,13 @@ const OBJECTIVE_OPTIONS = [
   { value: "reduce_ultra_processed", label: "Réduire les aliments ultra-transformés" },
 ];
 
+const ATABLE_GUEST_COURSES = [
+  ["aperitif", "Apéritif"],
+  ["entree", "Entrée"],
+  ["plat", "Plat"],
+  ["dessert", "Dessert"],
+];
+
 const SHOPPING_CATEGORIES = [
   { key: "produce", label: "Fruits et légumes", keywords: ["tomate", "courgette", "salade", "carotte", "oignon", "ail", "poivron", "pomme", "banane", "citron", "épinard", "brocoli", "champignon", "poireau", "concombre", "avocat", "herbe", "persil", "basilic", "coriandre", "fruit", "légume", "patate", "pomme de terre"] },
   { key: "protein", label: "Protéines", keywords: ["poulet", "boeuf", "bœuf", "porc", "viande", "poisson", "saumon", "thon", "crevette", "oeuf", "œuf", "tofu", "lentille", "pois chiche", "haricot", "jambon", "steak", "dinde", "légumineuse"] },
@@ -80,6 +87,9 @@ function categorizeIngredient(name) {
 }
 
 const MAX_OBJECTIVES = 3;
+
+// Miroir exact de APPETITE_MULTIPLIERS dans coordinator.py — garder synchronisé.
+const APPETITE_MULTIPLIERS = { low: 0.8, normal: 1.0, high: 1.25 };
 
 const WEEKDAY_KEYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -124,6 +134,8 @@ const ICONS = {
   sparkles: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3c.4 2 1.4 3 3.4 3.4-2 .4-3 1.4-3.4 3.4-.4-2-1.4-3-3.4-3.4C7.6 6 8.6 5 9 3z"/><path d="M15.5 10.5c.3 1.4.9 2 2.3 2.3-1.4.3-2 .9-2.3 2.3-.3-1.4-.9-2-2.3-2.3 1.4-.3 2-.9 2.3-2.3z"/><path d="M5 12c.3 1.4.9 2 2.3 2.3-1.4.3-2 .9-2.3 2.3-.3-1.4-.9-2-2.3-2.3C4.1 14 4.7 13.4 5 12z"/></svg>',
   chart: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17V9M9 17V3M15 17v-6"/></svg>',
   meal: '<svg viewBox="0 0 44 32" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="16" r="10.5"/><circle cx="16" cy="16" r="5.5"/><path d="M32 5v10M35 5v10M32 15c0 2 1.5 2 1.5 4v8M38.5 5c0 4-2 5-2 8v13"/></svg>',
+  glass: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h10l-1.4 8a3.6 3.6 0 0 1-7.2 0L5 2.5z"/><path d="M10 10.5v7M6.5 17.5h7"/></svg>',
+  message: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h14v9H8.5L5 16.5v-3H3v-9z"/></svg>',
 };
 
 function icon(name, extraClass) {
@@ -427,6 +439,26 @@ class ATableCard extends HTMLElement {
       .proposal-replace .icon{width:15px;height:15px}
       .proposal.is-loading{opacity:.5;pointer-events:none}
       .proposal-head input[type="checkbox"]{width:20px;height:20px}
+      .toggle-bar{display:flex;gap:8px;margin-bottom:12px}
+      .toggle-bar-btn{flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--divider-color,rgba(255,255,255,.15));background:none;color:inherit;cursor:pointer;font-size:13px}
+      .toggle-bar-btn.is-active{background:var(--primary-color,#4c8dff);border-color:var(--primary-color,#4c8dff);color:#fff}
+      .macro-sliders{display:flex;gap:14px;flex-wrap:nowrap}
+      .macro-sliders label{flex:1;min-width:0}
+      .macro-label-row{white-space:nowrap;font-size:13px}
+      .macro-sliders input[type="range"]{width:100%}
+      .macro-total{margin-top:6px;font-size:12px;color:var(--secondary-text-color,#aeb7c5);text-align:right}
+      .macro-total.is-warning{color:#e5484d}
+      .refine-details{margin-top:10px}
+      .refine-details summary{cursor:pointer;font-size:13px;color:var(--secondary-text-color,#aeb7c5)}
+      .refine-section{margin-top:16px;border-top:1px solid var(--divider-color,rgba(255,255,255,.08));padding-top:12px}
+      .refine-box{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+      .refine-box.is-loading{opacity:.6;pointer-events:none}
+      .refine-log{display:flex;flex-direction:column;gap:4px;font-size:12px}
+      .refine-entry{display:flex;justify-content:space-between;gap:8px;color:var(--secondary-text-color,#aeb7c5)}
+      .refine-input{width:100%;resize:vertical}
+      .refine-send{display:inline-flex;align-items:center;gap:6px;align-self:flex-end;background:none;border:1px solid var(--divider-color,rgba(255,255,255,.15));border-radius:8px;padding:6px 12px;color:inherit;cursor:pointer}
+      .refine-send .icon{width:15px;height:15px}
+      .wine-pairing{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--secondary-background-color,rgba(255,255,255,.04))}
       .proposal-title{font-weight:700;font-size:14px}
       .proposal-meta{display:flex;flex-wrap:wrap;gap:8px;color:var(--secondary-text-color,#aeb7c5);font-size:11px}
       .proposal-section{margin-top:8px;font-size:12px}
@@ -530,6 +562,7 @@ class ATableCard extends HTMLElement {
           <button class="icon-btn" type="button" data-open-shopping aria-label="Liste de courses" title="Liste de courses">${icon("basket")}</button>
           <button class="icon-btn" type="button" data-open-library aria-label="Mes recettes" title="Mes recettes">${icon("library")}</button>
           <button class="icon-btn" type="button" data-open-history aria-label="Historique" title="Historique">${icon("history")}</button>
+          <button class="icon-btn" type="button" data-open-guest aria-label="Repas invités" title="Repas invités">${icon("glass")}</button>
           <button class="icon-btn settings" type="button" aria-label="Paramètres" title="Paramètres">${icon("settings")}</button>
           <button class="icon-btn refresh" type="button" aria-label="Actualiser" title="Actualiser">${icon("refresh")}</button>
         </div>
@@ -594,12 +627,13 @@ class ATableCard extends HTMLElement {
     root.querySelector("[data-open-library]")?.addEventListener("click", () => this._openLibrary());
     root.querySelector("[data-open-history]")?.addEventListener("click", () => this._openHistory());
     root.querySelector("[data-open-shopping]")?.addEventListener("click", () => this._openShopping());
+    root.querySelector("[data-open-guest]")?.addEventListener("click", () => this._openGuest());
     root.querySelector(".add")?.addEventListener("click", () => this._openAdd());
     root.querySelector(".generate")?.addEventListener("click", () => this._generate());
     root.querySelectorAll("[data-count]").forEach((button) =>
       button.addEventListener("click", () => {
         const current = Number(this._data.preferences?.default_recipe_count || 6);
-        this._data.preferences.default_recipe_count = Math.max(1, Math.min(10, current + (button.dataset.count === "plus" ? 1 : -1)));
+        this._data.preferences.default_recipe_count = Math.max(1, Math.min(7, current + (button.dataset.count === "plus" ? 1 : -1)));
         this._render();
       })
     );
@@ -764,7 +798,7 @@ class ATableCard extends HTMLElement {
   }
 
   _openAdd() {
-    this._modal = { type: "add" };
+    this._modal = { type: "add", addMode: "ai" };
     this._mountModal();
   }
 
@@ -800,6 +834,62 @@ class ATableCard extends HTMLElement {
   _openShopping() {
     this._modal = { type: "shopping" };
     this._mountModal();
+  }
+
+  _openGuest() {
+    this._modal = { type: "guest", guests: 6, notes: "", refineLog: {} };
+    this._mountModal();
+  }
+
+  _renderRefineBox(kind, key) {
+    const logKey = `${kind}:${key}`;
+    const log = (this._modal.refineLog && this._modal.refineLog[logKey]) || [];
+    const logHtml = log
+      .map((entry) => `<div class="refine-entry"><span class="refine-you">Vous : ${this._esc(entry.text)}</span><span class="refine-status">${this._esc(entry.status)}</span></div>`)
+      .join("");
+    return `<div class="refine-box" data-refine-kind="${this._esc(kind)}" data-refine-key="${this._esc(String(key))}">
+      ${logHtml ? `<div class="refine-log">${logHtml}</div>` : ""}
+      <textarea class="refine-input" data-refine-message placeholder="Ex. Remplace le poulet par du tofu, ou un conseil de cuisson…" rows="2"></textarea>
+      <button class="refine-send" type="button" data-refine-send>${icon("message")}<span>Envoyer</span></button>
+    </div>`;
+  }
+
+  _bindRefineBoxes(overlay) {
+    overlay.querySelectorAll("[data-refine-send]").forEach((btn) => {
+      const box = btn.closest(".refine-box");
+      if (!box) return;
+      btn.addEventListener("click", async () => {
+        const kind = box.dataset.refineKind;
+        const key = box.dataset.refineKey;
+        const textarea = box.querySelector("[data-refine-message]");
+        const message = textarea?.value.trim();
+        if (!message) return;
+        btn.disabled = true;
+        box.classList.add("is-loading");
+        try {
+          let updated;
+          if (kind === "recipe") {
+            updated = await this._ws({ type: "a_table/refine_recipe", recipe_id: key, message });
+            this._data.recipes[key] = updated;
+          } else if (kind === "proposal") {
+            const index = Number(key);
+            updated = await this._ws({ type: "a_table/refine_proposal", draft_id: this._modal.draft_id, index, message });
+            this._data.drafts[this._modal.draft_id].proposals[index] = updated;
+          } else if (kind === "guest_course") {
+            updated = await this._ws({ type: "a_table/refine_guest_course", menu_id: this._modal.menu_id, course_key: key, message });
+            this._data.guest_menus[this._modal.menu_id] = updated;
+          }
+          const logKey = `${kind}:${key}`;
+          this._modal.refineLog = this._modal.refineLog || {};
+          this._modal.refineLog[logKey] = [...(this._modal.refineLog[logKey] || []), { text: message, status: "Mis à jour" }];
+          this._mountModal();
+        } catch (error) {
+          this._toast(error?.message || "Modification impossible.", "error");
+          btn.disabled = false;
+          box.classList.remove("is-loading");
+        }
+      });
+    });
   }
 
   async _toggleFavorite(recipeId) {
@@ -858,8 +948,12 @@ class ATableCard extends HTMLElement {
       const card = this._data?.meal_cards?.[this._modal.id];
       const recipe = card && this._recipe(card);
       if (!card || !recipe) return;
+      const scaleFactor = this._scaleFactor(recipe, card.servings);
+      const scaleNote = Math.abs(scaleFactor - 1) > 0.01
+        ? `<p class="taste-hint">Quantités ajustées à ${this._esc(card.servings || recipe.servings)} pers., appétit ${this._esc(this._data?.preferences?.appetite || "normal")}.</p>`
+        : "";
       const ingredients = recipe.ingredients?.length
-        ? `<ul>${recipe.ingredients.map((item) => `<li>${this._esc(item.quantity || "")} ${this._esc(item.unit || "")} ${this._esc(item.name || "")}</li>`).join("")}</ul>`
+        ? `<ul>${this._scaledIngredients(recipe, card.servings).map((item) => `<li>${this._esc(item.quantity != null ? Math.round(item.quantity * 100) / 100 : "")} ${this._esc(item.unit || "")} ${this._esc(item.name || "")}</li>`).join("")}</ul>`
         : "Aucun ingrédient détaillé pour le moment.";
       const steps = recipe.steps?.length
         ? `<ol>${recipe.steps.map((s) => `<li>${this._esc(s)}</li>`).join("")}</ol>`
@@ -879,7 +973,7 @@ class ATableCard extends HTMLElement {
         <div class="facts">
           <div><strong>Temps total</strong><br>${this._esc(recipe.cooking_minutes ?? "À préciser")} min</div>
           <div><strong>Portions</strong><br>${this._esc(card.servings || recipe.servings || 2)}</div>
-          <div><strong>Ingrédients</strong><br>${ingredients}</div>
+          <div><strong>Ingrédients</strong>${scaleNote}<br>${ingredients}</div>
           <div><strong>Étapes</strong><br>${steps}</div>
           <div>
             <strong>Nutrition (par portion)</strong><br>
@@ -892,6 +986,11 @@ class ATableCard extends HTMLElement {
             </div>
           </div>
           ${price}
+        </div>
+        <div class="refine-section">
+          <h3>Discuter avec l'IA</h3>
+          <p class="taste-hint">Ex. "remplace le poulet par du tofu" ou "un conseil de cuisson pour ne pas le dessécher".</p>
+          ${this._renderRefineBox("recipe", card.recipe_id)}
         </div>
         <footer class="actions">
           <button class="cancel" type="button">Fermer</button>
@@ -953,6 +1052,10 @@ class ATableCard extends HTMLElement {
                       <div class="nutrition-item"><b>${this._esc(nutr.fiber_g ?? "–")}</b><span>fibres</span></div>
                     </div>
                   </div>
+                  <details class="refine-details">
+                    <summary>Ajuster avec l'IA</summary>
+                    ${this._renderRefineBox("proposal", i)}
+                  </details>
                 </div>`;
               })
               .join("")}
@@ -964,21 +1067,67 @@ class ATableCard extends HTMLElement {
         </section>`;
       }
     } else if (this._modal.type === "add") {
+      const mode = this._modal.addMode || "ai";
       overlay.innerHTML = `<form class="dialog" novalidate>
         <header class="dialog-top">
           <h2>Ajouter une recette</h2>
           <button class="close" type="button">${icon("close")}</button>
         </header>
-        <p class="taste-hint">Colle le texte d'une recette et/ou ajoute une photo. L'IA la met au format À table (ingrédients, étapes, nutrition estimée).</p>
-        <label>Texte de la recette (facultatif si tu ajoutes une photo)
-          <textarea name="recipe_text" placeholder="Colle ici le texte d'une recette, par exemple copié depuis un site." rows="6"></textarea>
-        </label>
-        <label>Photo (facultatif)
-          <input name="recipe_photo" type="file" accept="image/*">
-        </label>
+        <div class="toggle-bar">
+          <button type="button" class="toggle-bar-btn ${mode === "ai" ? "is-active" : ""}" data-add-mode="ai">Importer avec l'IA</button>
+          <button type="button" class="toggle-bar-btn ${mode === "manual" ? "is-active" : ""}" data-add-mode="manual">Saisie manuelle</button>
+        </div>
+        <div class="${mode === "ai" ? "" : "hidden"}" data-add-mode-panel="ai">
+          <p class="taste-hint">Colle le texte d'une recette et/ou ajoute une photo. L'IA la met au format À table (ingrédients, étapes, nutrition estimée).</p>
+          <label>Texte de la recette (facultatif si tu ajoutes une photo)
+            <textarea name="recipe_text" placeholder="Colle ici le texte d'une recette, par exemple copié depuis un site." rows="6"></textarea>
+          </label>
+          <label>Photo (facultatif)
+            <input name="recipe_photo" type="file" accept="image/*">
+          </label>
+        </div>
+        <div class="${mode === "manual" ? "" : "hidden"}" data-add-mode-panel="manual">
+          <label>Titre
+            <input name="manual_title" placeholder="Ex. Curry de pois chiches">
+          </label>
+          <div class="row">
+            <label>Portions
+              <input name="manual_servings" type="number" min="1" value="2">
+            </label>
+            <label>Temps de cuisson (min)
+              <input name="manual_cooking_minutes" type="number" min="0">
+            </label>
+          </div>
+          <label>Ingrédients (un par ligne — quantité, unité, nom)
+            <textarea name="manual_ingredients" rows="4" placeholder="200, g, pâtes&#10;1, boîte, thon"></textarea>
+          </label>
+          <label>Étapes (une par ligne)
+            <textarea name="manual_steps" rows="4" placeholder="Faire bouillir l'eau salée.&#10;Cuire les pâtes 10 minutes."></textarea>
+          </label>
+          <label>Notes (facultatif)
+            <textarea name="manual_notes" rows="2"></textarea>
+          </label>
+          <label>Tags (séparés par des virgules)
+            <input name="manual_tags" placeholder="Ex. rapide, végétarien">
+          </label>
+          <details>
+            <summary>Nutrition (facultatif)</summary>
+            <div class="row">
+              <label>Kcal <input name="manual_kcal" type="number" min="0"></label>
+              <label>Protéines (g) <input name="manual_protein" type="number" min="0"></label>
+            </div>
+            <div class="row">
+              <label>Glucides (g) <input name="manual_carb" type="number" min="0"></label>
+              <label>Lipides (g) <input name="manual_fat" type="number" min="0"></label>
+            </div>
+          </details>
+          <label>Prix par portion (€, facultatif)
+            <input name="manual_price" type="number" min="0" step="0.1">
+          </label>
+        </div>
         <footer class="actions">
           <button class="cancel" type="button">Annuler</button>
-          <button class="save" type="submit"><span data-import-label>Importer avec l'IA</span></button>
+          <button class="save" type="submit"><span data-import-label>${mode === "ai" ? "Importer avec l'IA" : "Ajouter"}</span></button>
         </footer>
       </form>`;
     } else if (this._modal.type === "add_temp") {
@@ -1049,7 +1198,10 @@ class ATableCard extends HTMLElement {
       overlay.innerHTML = `<section class="dialog dialog-sm">
         <header class="dialog-top">
           <h2>Comment était ce repas ?</h2>
-          <button class="close" type="button" data-skip-rating>${icon("close")}</button>
+          <div class="dialog-top-actions">
+            <button class="icon-btn fav-btn ${recipe.is_favorite ? "is-active" : ""}" type="button" data-toggle-favorite="${this._esc(recipe.id)}" aria-label="Basculer favori" title="Favori">${icon("star", recipe.is_favorite ? "is-active" : "")}</button>
+            <button class="close" type="button" data-skip-rating>${icon("close")}</button>
+          </div>
         </header>
         <p class="rate-title">${this._esc(recipe.title)}</p>
         <div class="rate-choice">
@@ -1068,6 +1220,8 @@ class ATableCard extends HTMLElement {
       overlay.innerHTML = this._historyModalHTML();
     } else if (this._modal.type === "shopping") {
       overlay.innerHTML = this._shoppingModalHTML();
+    } else if (this._modal.type === "guest") {
+      overlay.innerHTML = this._guestModalHTML();
     }
 
     this.shadowRoot.append(overlay);
@@ -1081,6 +1235,8 @@ class ATableCard extends HTMLElement {
         btn.addEventListener("click", () => this._closeModal());
       }
     });
+
+    this._bindRefineBoxes(overlay);
 
     if (this._modal.type === "detail") {
       overlay.querySelector("[data-modal-cook]")?.addEventListener("click", async (event) => {
@@ -1139,9 +1295,72 @@ class ATableCard extends HTMLElement {
         });
       });
     } else if (this._modal.type === "add") {
+      overlay.querySelectorAll("[data-add-mode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          this._modal.addMode = btn.dataset.addMode;
+          this._mountModal();
+        });
+      });
+
+      const mode = this._modal.addMode || "ai";
       overlay.querySelector("form")?.addEventListener("submit", async (event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
+        const submitBtn = overlay.querySelector('button[type="submit"]');
+        const label = overlay.querySelector("[data-import-label]");
+
+        if (mode === "manual") {
+          const title = String(data.get("manual_title") || "").trim();
+          if (!title) {
+            this._toast("Ajoute un titre.", "error");
+            return;
+          }
+          const ingredients = String(data.get("manual_ingredients") || "")
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line) => {
+              const parts = line.split(",").map((p) => p.trim());
+              return { quantity: parts[0] ? Number(parts[0]) || parts[0] : null, unit: parts[1] || "", name: parts[2] || parts[0] || "" };
+            });
+          const steps = String(data.get("manual_steps") || "")
+            .split("\n")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          const tags = String(data.get("manual_tags") || "")
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean);
+          const nutrition = {};
+          if (data.get("manual_kcal")) nutrition.kcal = Number(data.get("manual_kcal"));
+          if (data.get("manual_protein")) nutrition.protein_g = Number(data.get("manual_protein"));
+          if (data.get("manual_carb")) nutrition.carb_g = Number(data.get("manual_carb"));
+          if (data.get("manual_fat")) nutrition.fat_g = Number(data.get("manual_fat"));
+
+          if (submitBtn) submitBtn.disabled = true;
+          try {
+            await this._ws({
+              type: "a_table/add_recipe",
+              title,
+              servings: Number(data.get("manual_servings") || 2),
+              cooking_minutes: data.get("manual_cooking_minutes") ? Number(data.get("manual_cooking_minutes")) : undefined,
+              tags,
+              ingredients,
+              steps,
+              notes: String(data.get("manual_notes") || ""),
+              nutrition,
+              price_per_serving: data.get("manual_price") ? Number(data.get("manual_price")) : undefined,
+            });
+            this._closeModal();
+            await this._load();
+            this._toast("Recette ajoutée à À cuisiner.", "success");
+          } catch (error) {
+            this._toast(error?.message || "Ajout impossible.", "error");
+            if (submitBtn) submitBtn.disabled = false;
+          }
+          return;
+        }
+
         const text = String(data.get("recipe_text") || "").trim();
         const file = data.get("recipe_photo");
         const hasFile = file && file.size > 0;
@@ -1150,8 +1369,6 @@ class ATableCard extends HTMLElement {
           return;
         }
 
-        const submitBtn = overlay.querySelector('button[type="submit"]');
-        const label = overlay.querySelector("[data-import-label]");
         if (submitBtn) submitBtn.disabled = true;
 
         try {
@@ -1239,6 +1456,8 @@ class ATableCard extends HTMLElement {
       this._bindHistoryModal(overlay);
     } else if (this._modal.type === "shopping") {
       this._bindShoppingModal(overlay);
+    } else if (this._modal.type === "guest") {
+      this._bindGuestModal(overlay);
     }
   }
 
@@ -1246,6 +1465,18 @@ class ATableCard extends HTMLElement {
 
   _bindRateModal(overlay) {
     let liked = null;
+    overlay.querySelector("[data-toggle-favorite]")?.addEventListener("click", async (event) => {
+      const btn = event.currentTarget;
+      const recipeId = btn.dataset.toggleFavorite;
+      try {
+        const recipe = await this._ws({ type: "a_table/toggle_favorite", recipe_id: recipeId });
+        if (this._data?.recipes?.[recipeId]) this._data.recipes[recipeId] = recipe;
+        btn.classList.toggle("is-active", recipe.is_favorite);
+        btn.querySelector("svg")?.classList.toggle("is-active", recipe.is_favorite);
+      } catch (error) {
+        this._toast(error?.message || "Impossible de mettre à jour le favori.", "error");
+      }
+    });
     const saveBtn = overlay.querySelector("[data-save-rating]");
     overlay.querySelectorAll("[data-rate]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1453,14 +1684,37 @@ class ATableCard extends HTMLElement {
       .filter((recipeId) => recipeId && this._data?.recipes?.[recipeId] && !exported.has(recipeId));
   }
 
+  _scaleFactor(recipe, servings) {
+    const appetite = this._data?.preferences?.appetite || "normal";
+    const multiplier = APPETITE_MULTIPLIERS[appetite] ?? 1;
+    const baseServings = recipe?.servings || servings || 1;
+    const targetServings = servings || baseServings;
+    return (targetServings / baseServings) * multiplier;
+  }
+
+  _scaledIngredients(recipe, servings) {
+    const factor = this._scaleFactor(recipe, servings);
+    return (recipe.ingredients || []).map((ing) => {
+      const quantity = Number(ing.quantity);
+      return {
+        ...ing,
+        quantity: Number.isFinite(quantity) ? quantity * factor : ing.quantity,
+      };
+    });
+  }
+
   _shoppingItems() {
-    const recipeIds = this._shoppingRecipeIds();
+    const exported = new Set(this._data?.shopping_list_exported_recipe_ids || []);
+    const cards = this._activeMealCards().filter(
+      (card) => card.recipe_id && this._data?.recipes?.[card.recipe_id] && !exported.has(card.recipe_id)
+    );
     const byKey = new Map();
 
-    recipeIds.forEach((recipeId) => {
-      const recipe = this._data?.recipes?.[recipeId];
+    cards.forEach((card) => {
+      const recipe = this._data?.recipes?.[card.recipe_id];
       if (!recipe) return;
-      (recipe.ingredients || []).forEach((ing) => {
+      const scaled = this._scaledIngredients(recipe, card.servings || recipe.servings);
+      scaled.forEach((ing) => {
         const name = String(ing.name || "").trim();
         if (!name) return;
         const unit = String(ing.unit || "").trim();
@@ -1590,6 +1844,147 @@ class ATableCard extends HTMLElement {
       }
     });
     overlay.querySelector("[data-close-shopping]")?.addEventListener("click", () => this._closeModal());
+  }
+
+  // ---- Module Invité -------------------------------------------------------
+
+  _guestCourseCardHTML(key, label, course) {
+    if (!course || !course.title) return "";
+    const ingredients = (course.ingredients || [])
+      .map((ing) => `${ing.quantity || ""} ${ing.unit || ""} ${ing.name || ""}`)
+      .join(", ");
+    const steps = course.steps?.length
+      ? `<ol>${course.steps.map((s) => `<li>${this._esc(s)}</li>`).join("")}</ol>`
+      : "";
+    return `<div class="proposal" data-guest-course="${key}">
+      <div class="proposal-head">
+        <strong class="proposal-title">${label} — ${this._esc(course.title)}</strong>
+        <button class="icon-btn proposal-replace" type="button" data-regenerate-course="${key}" aria-label="Remplacer ce plat" title="Remplacer ce plat">${icon("refresh")}</button>
+      </div>
+      <div class="proposal-section">
+        <strong>Ingrédients</strong>
+        <span>${this._esc(ingredients || "Aucun")}</span>
+      </div>
+      ${steps ? `<div class="proposal-section"><strong>Étapes</strong>${steps}</div>` : ""}
+      ${course.notes ? `<div class="proposal-section"><strong>Notes</strong><span>${this._esc(course.notes)}</span></div>` : ""}
+      <details class="refine-details">
+        <summary>Ajuster avec l'IA</summary>
+        ${this._renderRefineBox("guest_course", key)}
+      </details>
+    </div>`;
+  }
+
+  _guestModalHTML() {
+    const menus = Object.values(this._data?.guest_menus || {});
+    const menu = this._modal.menu_id ? this._data?.guest_menus?.[this._modal.menu_id] : menus[menus.length - 1];
+
+    if (!menu) {
+      return `<section class="dialog">
+        <header class="dialog-top">
+          <h2>Repas invités</h2>
+          <button class="close" type="button">${icon("close")}</button>
+        </header>
+        <p class="taste-hint">Compose un repas complet (apéritif, entrée, plat, dessert) avec des suggestions d'accord mets-vins, via l'IA.</p>
+        <label>Nombre d'invités
+          <input name="guests" type="number" min="1" max="30" value="${this._modal.guests || 6}">
+        </label>
+        <label>Occasion, contraintes (facultatif)
+          <textarea name="notes" rows="3" placeholder="Ex. Anniversaire, un invité sans gluten…">${this._esc(this._modal.notes || "")}</textarea>
+        </label>
+        <footer class="actions">
+          <button class="cancel" type="button">Annuler</button>
+          <button class="save" type="button" data-generate-guest><span data-generate-guest-label>Générer le menu</span></button>
+        </footer>
+      </section>`;
+    }
+
+    this._modal.menu_id = menu.id;
+    const courseCards = ATABLE_GUEST_COURSES.map(([key, label]) => this._guestCourseCardHTML(key, label, menu.courses?.[key])).join("");
+    const wineCards = (menu.wine_pairings || [])
+      .map((p) => `<div class="wine-pairing"><strong>${this._esc(p.style || "")}</strong><span>${this._esc(p.description || "")}</span></div>`)
+      .join("");
+
+    return `<section class="dialog">
+      <header class="dialog-top">
+        <h2>Repas invités — ${this._esc(menu.guests)} convives</h2>
+        <button class="close" type="button">${icon("close")}</button>
+      </header>
+      <div class="facts">
+        ${courseCards}
+        <div class="proposal-section">
+          <h3>Accords mets-vins</h3>
+          <button class="icon-btn" type="button" data-regenerate-wine aria-label="Régénérer les suggestions" title="Régénérer les suggestions">${icon("refresh")}</button>
+          ${wineCards || "<span>Aucune suggestion.</span>"}
+        </div>
+      </div>
+      <footer class="actions">
+        <button class="cancel" type="button" data-dismiss-guest>Supprimer ce menu</button>
+        <button class="save" type="button" data-close-guest>Fermer</button>
+      </footer>
+    </section>`;
+  }
+
+  _bindGuestModal(overlay) {
+    overlay.querySelector("[data-close-guest]")?.addEventListener("click", () => this._closeModal());
+    overlay.querySelector("[data-generate-guest]")?.addEventListener("click", async (event) => {
+      const btn = event.currentTarget;
+      const guests = Number(overlay.querySelector('[name="guests"]')?.value || 6);
+      const notes = overlay.querySelector('[name="notes"]')?.value.trim() || "";
+      const label = overlay.querySelector("[data-generate-guest-label]");
+      btn.disabled = true;
+      if (label) label.textContent = "Génération en cours…";
+      try {
+        const menu = await this._ws({ type: "a_table/generate_guest_menu", guests, notes });
+        this._data.guest_menus = this._data.guest_menus || {};
+        this._data.guest_menus[menu.id] = menu;
+        this._modal.menu_id = menu.id;
+        this._mountModal();
+      } catch (error) {
+        this._toast(error?.message || "Génération impossible.", "error");
+        btn.disabled = false;
+        if (label) label.textContent = "Générer le menu";
+      }
+    });
+
+    overlay.querySelectorAll("[data-regenerate-course]").forEach((btn) => {
+      btn.addEventListener("click", async (event) => {
+        const courseKey = event.currentTarget.dataset.regenerateCourse;
+        const card = overlay.querySelector(`[data-guest-course="${courseKey}"]`);
+        card?.classList.add("is-loading");
+        try {
+          const menu = await this._ws({ type: "a_table/regenerate_guest_course", menu_id: this._modal.menu_id, course_key: courseKey });
+          this._data.guest_menus[menu.id] = menu;
+          this._mountModal();
+        } catch (error) {
+          this._toast(error?.message || "Remplacement impossible.", "error");
+          card?.classList.remove("is-loading");
+        }
+      });
+    });
+
+    overlay.querySelector("[data-regenerate-wine]")?.addEventListener("click", async (event) => {
+      const btn = event.currentTarget;
+      btn.disabled = true;
+      try {
+        const menu = await this._ws({ type: "a_table/regenerate_wine_pairings", menu_id: this._modal.menu_id });
+        this._data.guest_menus[menu.id] = menu;
+        this._mountModal();
+      } catch (error) {
+        this._toast(error?.message || "Régénération impossible.", "error");
+        btn.disabled = false;
+      }
+    });
+
+    overlay.querySelector("[data-dismiss-guest]")?.addEventListener("click", async () => {
+      if (!confirm("Supprimer ce menu invité ?")) return;
+      try {
+        await this._ws({ type: "a_table/dismiss_guest_menu", menu_id: this._modal.menu_id });
+        if (this._data.guest_menus) delete this._data.guest_menus[this._modal.menu_id];
+        this._closeModal();
+      } catch (error) {
+        this._toast(error?.message || "Suppression impossible.", "error");
+      }
+    });
   }
 
   // ---- Settings modal ----------------------------------------------------
@@ -1872,18 +2267,22 @@ class ATableCard extends HTMLElement {
               <input name="max_repeat_vegetable" type="number" min="0" value="${rules.max_repeat_vegetable ?? 2}">
             </label>
           </div>
-          <h3 style="margin-top:16px">Répartition cible (G/L/P)</h3>
-          <div class="row">
-            <label>Protéines (%)
-              <input name="protein_pct" type="number" min="0" max="100" value="${macros.protein_pct ?? 30}">
+          <h3 style="margin-top:16px">Objectifs nutritionnels</h3>
+          <label>Objectif calorique par portion (facultatif)
+            <input name="target_kcal_per_serving" type="number" min="0" placeholder="Ex. 650" value="${prefs.target_kcal_per_serving ?? ""}">
+          </label>
+          <div class="macro-sliders" data-macro-sliders>
+            <label><span class="macro-label-row">Protéines <span data-macro-value="protein_pct">${macros.protein_pct ?? 30}</span>%</span>
+              <input name="protein_pct" type="range" min="0" max="100" step="5" value="${macros.protein_pct ?? 30}" data-macro-slider>
             </label>
-            <label>Glucides (%)
-              <input name="carb_pct" type="number" min="0" max="100" value="${macros.carb_pct ?? 45}">
+            <label><span class="macro-label-row">Glucides <span data-macro-value="carb_pct">${macros.carb_pct ?? 45}</span>%</span>
+              <input name="carb_pct" type="range" min="0" max="100" step="5" value="${macros.carb_pct ?? 45}" data-macro-slider>
             </label>
-            <label>Lipides (%)
-              <input name="fat_pct" type="number" min="0" max="100" value="${macros.fat_pct ?? 25}">
+            <label><span class="macro-label-row">Lipides <span data-macro-value="fat_pct">${macros.fat_pct ?? 25}</span>%</span>
+              <input name="fat_pct" type="range" min="0" max="100" step="5" value="${macros.fat_pct ?? 25}" data-macro-slider>
             </label>
           </div>
+          <div class="macro-total" data-macro-total></div>
         </div>
 
         <div class="settings-section">
@@ -1920,6 +2319,24 @@ class ATableCard extends HTMLElement {
     const prefs = draft.preferences;
 
     overlay.querySelector("[data-settings-cancel]")?.addEventListener("click", () => this._closeModal());
+
+    const updateMacroTotal = () => {
+      const sliders = overlay.querySelectorAll("[data-macro-slider]");
+      let total = 0;
+      sliders.forEach((s) => {
+        total += Number(s.value) || 0;
+        overlay.querySelector(`[data-macro-value="${s.name}"]`).textContent = s.value;
+      });
+      const totalEl = overlay.querySelector("[data-macro-total]");
+      if (totalEl) {
+        totalEl.textContent = `Total : ${total}%`;
+        totalEl.classList.toggle("is-warning", total !== 100);
+      }
+    };
+    overlay.querySelectorAll("[data-macro-slider]").forEach((slider) => {
+      slider.addEventListener("input", updateMacroTotal);
+    });
+    updateMacroTotal();
 
     // Tabs: capture current form state before switching, so edits persist.
     overlay.querySelectorAll("[data-tab]").forEach((tab) => {
@@ -2184,6 +2601,7 @@ class ATableCard extends HTMLElement {
       ai_task_entity_id: String(data.get("ai_task_entity_id") || "") || prefs.ai_task_entity_id,
       todo_entity_id: String(data.get("todo_entity_id") || "") || null,
       budget_per_serving: data.get("budget_per_serving") ? Number(data.get("budget_per_serving")) : null,
+      target_kcal_per_serving: data.get("target_kcal_per_serving") ? Number(data.get("target_kcal_per_serving")) : null,
       grocery_store: String(data.get("grocery_store") || ""),
       time_profile: String(data.get("time_profile") || "normal"),
       complexity: String(data.get("complexity") || "free"),

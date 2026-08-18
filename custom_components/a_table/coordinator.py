@@ -29,6 +29,22 @@ RECIPE_QUALITY_GUIDELINES = (
     "au moins 4 à 6 étapes selon la complexité du plat, jamais une seule phrase vague."
 )
 
+# Miroir exact de OBJECTIVE_OPTIONS dans frontend/a-table.js — garder synchronisé.
+OBJECTIVE_LABELS = {
+    "reduce_mental_load": "Diminuer la charge mentale",
+    "eat_balanced": "Manger plus équilibré",
+    "eat_seasonal": "Manger de saison",
+    "discover_new_recipes": "Découvrir de nouvelles recettes",
+    "eat_less_meat": "Manger moins de viande",
+    "reduce_grocery_budget": "Réduire le budget des courses",
+    "reduce_food_waste": "Réduire le gaspillage alimentaire",
+    "quick_meals": "Préparer des repas rapides",
+    "reduce_ultra_processed": "Réduire les aliments ultra-transformés",
+}
+
+# Miroir exact de APPETITE_MULTIPLIERS dans frontend/a-table.js — garder synchronisé.
+APPETITE_MULTIPLIERS = {"low": 0.8, "normal": 1.0, "high": 1.25}
+
 
 class ATableCoordinator:
     """Centralise les opérations sur recettes, planning et historique."""
@@ -66,8 +82,13 @@ class ATableCoordinator:
         servings: int = 2,
         cooking_minutes: int | None = None,
         tags: list[str] | None = None,
+        ingredients: list[dict[str, Any]] | None = None,
+        steps: list[str] | None = None,
+        notes: str = "",
+        nutrition: dict[str, Any] | None = None,
+        price_per_serving: float | None = None,
     ) -> dict[str, Any]:
-        """Ajoute une recette minimale et une carte dans À cuisiner."""
+        """Ajoute une recette (saisie manuelle, minimale ou complète) et une carte dans À cuisiner."""
         now = dt_util.now().isoformat()
         recipe_id = f"recipe_{uuid4().hex}"
         meal_card_id = f"meal_{uuid4().hex}"
@@ -81,14 +102,15 @@ class ATableCoordinator:
             "servings": servings,
             "cooking_minutes": cooking_minutes,
             "tags": tags or [],
-            "ingredients": [],
-            "steps": [],
-            "nutrition": {},
+            "ingredients": ingredients or [],
+            "steps": steps or [],
+            "notes": notes,
+            "nutrition": nutrition or {},
             "image_url": None,
             "image_alt": "",
             "image_status": "missing",
             "image_reference": None,
-            "price_per_serving": None,
+            "price_per_serving": price_per_serving,
             "last_cooked_at": None,
             "times_cooked": 0,
             "ratings": [],
@@ -183,7 +205,7 @@ class ATableCoordinator:
         recipes = self.store.data.get("recipes", {})
         history = self.store.data.get("history", [])
 
-        count = min(count, 10)  # max 10
+        count = min(count, 7)  # max 7
 
         context = self._build_prompt_context(count, prefs, rules, temp_ings, recipes, history)
 
@@ -351,9 +373,16 @@ class ATableCoordinator:
         """Construit le contexte structuré à envoyer à l'IA."""
         lines = []
 
+        lines.append(f"- Nous sommes le {dt_util.now().strftime('%d/%m/%Y')}.")
+
         servings = prefs.get("default_servings", 2)
         appetite = prefs.get("appetite", "normal")
-        lines.append(f"- Foyer : {servings} personnes, appétit {appetite}.")
+        appetite_multiplier = APPETITE_MULTIPLIERS.get(appetite, 1.0)
+        lines.append(
+            f"- Foyer : {servings} personnes, appétit {appetite} (facteur ×{appetite_multiplier} "
+            "sur les quantités par rapport à un appétit normal) — calcule les quantités "
+            "d'ingrédients en conséquence."
+        )
 
         diets = prefs.get("diets", [])
         if "other" in diets:
@@ -381,7 +410,14 @@ class ATableCoordinator:
             lines.append(f"- Équipement à privilégier : {preferred}.")
 
         objectives = prefs.get("objectives", [])
-        lines.append(f"- Objectifs : {', '.join(objectives) if objectives else 'aucun objectif spécifique'}.")
+        objective_labels = [OBJECTIVE_LABELS.get(o, o) for o in objectives]
+        lines.append(f"- Objectifs : {', '.join(objective_labels) if objective_labels else 'aucun objectif spécifique'}.")
+        if "eat_seasonal" in objectives:
+            lines.append(
+                "- Précision sur \"Manger de saison\" : cela concerne les fruits et légumes de "
+                "saison, pas l'exclusion de plats conviviaux comme la raclette, le couscous ou "
+                "le croque-monsieur, qui restent bienvenus toute l'année."
+            )
 
         budget = prefs.get("budget_per_serving")
         grocery = prefs.get("grocery_store", "")
@@ -407,6 +443,10 @@ class ATableCoordinator:
         c = macros.get("carb_pct", 45)
         f = macros.get("fat_pct", 25)
         lines.append(f"- Répartition cible : {p}% protéines, {c}% glucides, {f}% lipides.")
+
+        target_kcal = prefs.get("target_kcal_per_serving")
+        if target_kcal:
+            lines.append(f"- Objectif calorique par portion : {target_kcal} kcal (à respecter approximativement, ±10%).")
 
         if temp_ings:
             temp_lines = []
@@ -687,6 +727,106 @@ class ATableCoordinator:
 
         return new_proposal
 
+    def _build_refine_instructions(self, current_recipe: dict[str, Any], user_message: str) -> str:
+        """Construit le prompt de modification ciblée d'une recette/proposition existante."""
+        current_json = json.dumps(
+            {
+                "title": current_recipe.get("title"),
+                "servings": current_recipe.get("servings"),
+                "cooking_minutes": current_recipe.get("cooking_minutes"),
+                "ingredients": current_recipe.get("ingredients", []),
+                "steps": current_recipe.get("steps", []),
+                "notes": current_recipe.get("notes", ""),
+                "nutrition": current_recipe.get("nutrition", {}),
+                "tags": current_recipe.get("tags", []),
+                "price_per_serving": current_recipe.get("price_per_serving"),
+            },
+            ensure_ascii=False,
+        )
+
+        return (
+            "Tu es un assistant culinaire. Voici une recette actuelle et une demande de "
+            "modification de l'utilisateur.\n\n"
+            f"RECETTE ACTUELLE (JSON) :\n{current_json}\n\n"
+            f"DEMANDE UTILISATEUR : {user_message}\n\n"
+            "CONSIGNE : si la demande change un ingrédient ou une contrainte (ex. remplacer "
+            "une protéine), mets à jour ingredients/steps/nutrition/tags en conséquence. Si "
+            "c'est un simple conseil de cuisson ou une précision, AJOUTE-la uniquement aux "
+            "steps ou notes sans changer le reste. Ne modifie que ce qui est nécessaire pour "
+            "répondre à la demande, garde tout le reste identique à la recette actuelle.\n\n"
+            f"{RECIPE_QUALITY_GUIDELINES}\n\n"
+            "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
+            "reprenant exactement la même structure que la recette actuelle ci-dessus (title, "
+            "servings, cooking_minutes, ingredients, steps, notes, nutrition, tags, "
+            "price_per_serving), avec les champs modifiés selon la demande."
+        )
+
+    async def _call_refine_ai(self, prefs: dict[str, Any], task_name: str, instructions: str) -> dict[str, Any]:
+        """Appelle ai_task.generate_data et parse la recette JSON renvoyée."""
+        response = await self.hass.services.async_call(
+            "ai_task",
+            "generate_data",
+            {
+                "task_name": task_name,
+                "entity_id": self._ai_task_entity_id(prefs),
+                "instructions": instructions,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        response_text = response.get("data") or response.get("response") or response.get("result") or ""
+
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
+        if json_match:
+            response_text = json_match.group(0)
+
+        try:
+            parsed = json.loads(response_text)
+            if not isinstance(parsed, dict) or not parsed.get("title"):
+                raise ValueError("Réponse IA invalide")
+        except Exception as e:
+            logger.error(f"Erreur de parsing JSON (modification via IA) : {e}")
+            raise ValueError("L'IA n'a pas pu appliquer cette modification. Réessaie.") from e
+
+        return parsed
+
+    async def async_refine_recipe(self, recipe_id: str, user_message: str) -> dict[str, Any]:
+        """Modifie une recette enregistrée via une consigne libre, en dialogue avec l'IA."""
+        recipe = self.store.data["recipes"].get(recipe_id)
+        if recipe is None:
+            raise ValueError("Recette introuvable")
+
+        prefs = self.store.data.get("preferences", {})
+        instructions = self._build_refine_instructions(recipe, user_message)
+        parsed = await self._call_refine_ai(prefs, "Modification d'une recette", instructions)
+
+        recipe.update(parsed)
+        recipe["updated_at"] = dt_util.now().isoformat()
+        await self.store.async_save()
+
+        return recipe
+
+    async def async_refine_proposal(self, draft_id: str, index: int, user_message: str) -> dict[str, Any]:
+        """Modifie une proposition d'un brouillon via une consigne libre, en dialogue avec l'IA."""
+        drafts = self.store.data.get("drafts", {})
+        draft = drafts.get(draft_id)
+        if draft is None:
+            raise ValueError(f"Brouillon {draft_id} introuvable")
+
+        proposals = draft.get("proposals", [])
+        if index < 0 or index >= len(proposals):
+            raise ValueError("Proposition introuvable dans ce brouillon")
+
+        prefs = self.store.data.get("preferences", {})
+        instructions = self._build_refine_instructions(proposals[index], user_message)
+        parsed = await self._call_refine_ai(prefs, "Modification d'une proposition de repas", instructions)
+
+        proposals[index] = {**proposals[index], **parsed}
+        await self.store.async_save()
+
+        return proposals[index]
+
     def _next_position(self, placement: str) -> int:
         """Calcule la prochaine position libre d'un emplacement."""
         positions = [
@@ -948,3 +1088,237 @@ class ATableCoordinator:
         await self.store.async_save()
 
         return meal_card
+
+    GUEST_COURSE_KEYS = ("aperitif", "entree", "plat", "dessert")
+    GUEST_COURSE_LABELS = {
+        "aperitif": "Apéritif",
+        "entree": "Entrée",
+        "plat": "Plat",
+        "dessert": "Dessert",
+    }
+
+    def _guest_menu_context(self, prefs: dict[str, Any], temp_ings: list[dict[str, Any]], notes: str) -> str:
+        """Construit le contexte commun (régimes/allergies/goûts/stock) pour le module Invité."""
+        lines = []
+        diets = prefs.get("diets", [])
+        lines.append(f"- Régimes du foyer : {', '.join(diets) if diets else 'aucun'}.")
+        allergies = prefs.get("allergies", [])
+        lines.append(f"- Allergies/intolérances : {', '.join(allergies) if allergies else 'aucune'}.")
+        liked = prefs.get("liked_ingredients", [])
+        disliked = prefs.get("disliked_ingredients", [])
+        if liked or disliked:
+            lines.append(f"- Goûts : adore {', '.join(liked) if liked else 'rien de spécifique'}; n'aime pas {', '.join(disliked) if disliked else 'rien de spécifique'}.")
+        if temp_ings:
+            temp_lines = [f"- {t.get('quantity', '')} {t.get('unit', '')} {t.get('name', '')}" for t in temp_ings]
+            lines.append("- Aliments déjà disponibles à utiliser en priorité :\n" + "\n".join(temp_lines))
+        if notes:
+            lines.append(f"- Occasion / contraintes précisées par l'utilisateur : {notes}")
+        return "\n".join(lines)
+
+    async def async_generate_guest_menu(self, guests: int, notes: str = "") -> dict[str, Any]:
+        """Génère un menu invité complet (apéro/entrée/plat/dessert) + accords mets-vins, en un seul appel IA."""
+        prefs = self.store.data.get("preferences", {})
+        temp_ings = self.store.data.get("temporary_ingredients", [])
+        context = self._guest_menu_context(prefs, temp_ings, notes)
+
+        instructions = (
+            "Tu es un assistant culinaire qui compose un repas complet pour recevoir des invités. "
+            f"Le repas est prévu pour {guests} convives.\n\n"
+            "CONTEXTE :\n"
+            f"{context}\n\n"
+            f"{RECIPE_QUALITY_GUIDELINES}\n\n"
+            "Compose un apéritif, une entrée, un plat et un dessert cohérents entre eux (pas de "
+            "répétition d'ingrédients ou de techniques d'un plat à l'autre), adaptés aux régimes/"
+            "allergies du foyer, en utilisant en priorité les aliments déjà disponibles si "
+            "pertinent. Propose aussi 2 à 4 suggestions d'accord mets-vins sous forme de STYLES "
+            "(ex. \"rouge léger et fruité\", \"blanc sec et minéral\", \"blanc moelleux ou "
+            "pétillant\") avec une courte justification liée au menu — jamais un nom de marque "
+            "ou de domaine précis, car cela ne peut pas être vérifié.\n\n"
+            "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
+            "exactement au format :\n"
+            "{\n"
+            '  "courses": {\n'
+            '    "aperitif": {"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], "steps": ["..."], "notes": "..."},\n'
+            '    "entree": {"title": "...", "ingredients": [...], "steps": ["..."], "notes": "..."},\n'
+            '    "plat": {"title": "...", "ingredients": [...], "steps": ["..."], "notes": "..."},\n'
+            '    "dessert": {"title": "...", "ingredients": [...], "steps": ["..."], "notes": "..."}\n'
+            "  },\n"
+            '  "wine_pairings": [{"style": "...", "description": "..."}]\n'
+            "}"
+        )
+
+        response = await self.hass.services.async_call(
+            "ai_task",
+            "generate_data",
+            {
+                "task_name": "Génération d'un menu invité",
+                "entity_id": self._ai_task_entity_id(prefs),
+                "instructions": instructions,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        response_text = response.get("data") or response.get("response") or response.get("result") or ""
+
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
+        if json_match:
+            response_text = json_match.group(0)
+
+        try:
+            parsed = json.loads(response_text)
+            courses = parsed.get("courses")
+            if not isinstance(courses, dict) or not all(k in courses for k in self.GUEST_COURSE_KEYS):
+                raise ValueError("Réponse IA invalide")
+        except Exception as e:
+            logger.error(f"Erreur de parsing JSON (menu invité) : {e}")
+            raise ValueError("L'IA n'a pas pu générer ce menu. Réessaie.") from e
+
+        now = dt_util.now().isoformat()
+        menu_id = f"guest_{uuid4().hex}"
+        menu = {
+            "id": menu_id,
+            "created_at": now,
+            "guests": guests,
+            "notes": notes,
+            "courses": {key: courses.get(key, {}) for key in self.GUEST_COURSE_KEYS},
+            "wine_pairings": [p for p in (parsed.get("wine_pairings") or []) if isinstance(p, dict)],
+        }
+
+        self.store.data["guest_menus"][menu_id] = menu
+        await self.store.async_save()
+
+        return menu
+
+    def _get_guest_menu(self, menu_id: str) -> dict[str, Any]:
+        menu = self.store.data.get("guest_menus", {}).get(menu_id)
+        if menu is None:
+            raise ValueError("Menu invité introuvable")
+        return menu
+
+    async def async_regenerate_guest_course(self, menu_id: str, course_key: str) -> dict[str, Any]:
+        """Régénère un seul plat d'un menu invité, en gardant les autres plats et les accords vins."""
+        menu = self._get_guest_menu(menu_id)
+        if course_key not in self.GUEST_COURSE_KEYS:
+            raise ValueError("Type de plat invalide")
+
+        prefs = self.store.data.get("preferences", {})
+        temp_ings = self.store.data.get("temporary_ingredients", [])
+        context = self._guest_menu_context(prefs, temp_ings, menu.get("notes", ""))
+
+        other_courses = [
+            f"- {self.GUEST_COURSE_LABELS[k]} : {menu['courses'][k].get('title', '')}"
+            for k in self.GUEST_COURSE_KEYS
+            if k != course_key and menu["courses"].get(k)
+        ]
+
+        instructions = (
+            f"Tu composes le {self.GUEST_COURSE_LABELS[course_key].lower()} d'un repas invités pour "
+            f"{menu.get('guests', 2)} convives. Les autres plats déjà choisis pour ce repas sont :\n"
+            + ("\n".join(other_courses) if other_courses else "aucun autre plat encore choisi")
+            + f"\n\nCONTEXTE :\n{context}\n\n{RECIPE_QUALITY_GUIDELINES}\n\n"
+            "Propose une idée différente de la précédente pour ce plat, cohérente avec les autres "
+            "plats du menu (pas de répétition d'ingrédients/techniques).\n\n"
+            "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
+            "exactement au format :\n"
+            '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], "steps": ["..."], "notes": "..."}'
+        )
+
+        response = await self.hass.services.async_call(
+            "ai_task",
+            "generate_data",
+            {
+                "task_name": "Remplacement d'un plat du menu invité",
+                "entity_id": self._ai_task_entity_id(prefs),
+                "instructions": instructions,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        response_text = response.get("data") or response.get("response") or response.get("result") or ""
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
+        if json_match:
+            response_text = json_match.group(0)
+
+        try:
+            new_course = json.loads(response_text)
+            if not isinstance(new_course, dict) or not new_course.get("title"):
+                raise ValueError("Réponse IA invalide")
+        except Exception as e:
+            logger.error(f"Erreur de parsing JSON (plat du menu invité) : {e}")
+            raise ValueError("L'IA n'a pas pu générer de remplacement. Réessaie.") from e
+
+        menu["courses"][course_key] = new_course
+        await self.store.async_save()
+
+        return menu
+
+    async def async_refine_guest_course(self, menu_id: str, course_key: str, message: str) -> dict[str, Any]:
+        """Ajuste un plat d'un menu invité via une consigne libre, en dialogue avec l'IA."""
+        menu = self._get_guest_menu(menu_id)
+        if course_key not in self.GUEST_COURSE_KEYS:
+            raise ValueError("Type de plat invalide")
+
+        prefs = self.store.data.get("preferences", {})
+        instructions = self._build_refine_instructions(menu["courses"].get(course_key, {}), message)
+        parsed = await self._call_refine_ai(prefs, "Ajustement d'un plat du menu invité", instructions)
+
+        menu["courses"][course_key] = {**menu["courses"].get(course_key, {}), **parsed}
+        await self.store.async_save()
+
+        return menu
+
+    async def async_regenerate_wine_pairings(self, menu_id: str) -> dict[str, Any]:
+        """Régénère uniquement les suggestions d'accord mets-vins d'un menu invité."""
+        menu = self._get_guest_menu(menu_id)
+        prefs = self.store.data.get("preferences", {})
+
+        course_lines = [
+            f"- {self.GUEST_COURSE_LABELS[k]} : {menu['courses'][k].get('title', '')}"
+            for k in self.GUEST_COURSE_KEYS
+            if menu["courses"].get(k)
+        ]
+
+        instructions = (
+            "Voici le menu d'un repas invités :\n" + "\n".join(course_lines) + "\n\n"
+            "Propose 2 à 4 suggestions d'accord mets-vins sous forme de STYLES (ex. \"rouge léger "
+            "et fruité\", \"blanc sec et minéral\"), jamais de marque ou domaine précis, avec une "
+            "courte justification liée au menu.\n\n"
+            "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
+            'exactement au format : {"wine_pairings": [{"style": "...", "description": "..."}]}'
+        )
+
+        response = await self.hass.services.async_call(
+            "ai_task",
+            "generate_data",
+            {
+                "task_name": "Accords mets-vins du menu invité",
+                "entity_id": self._ai_task_entity_id(prefs),
+                "instructions": instructions,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        response_text = response.get("data") or response.get("response") or response.get("result") or ""
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
+        if json_match:
+            response_text = json_match.group(0)
+
+        try:
+            parsed = json.loads(response_text)
+            pairings = [p for p in (parsed.get("wine_pairings") or []) if isinstance(p, dict)]
+        except Exception as e:
+            logger.error(f"Erreur de parsing JSON (accords mets-vins) : {e}")
+            raise ValueError("L'IA n'a pas pu générer de suggestions. Réessaie.") from e
+
+        menu["wine_pairings"] = pairings
+        await self.store.async_save()
+
+        return menu
+
+    async def async_dismiss_guest_menu(self, menu_id: str) -> None:
+        """Supprime un menu invité."""
+        self.store.data.get("guest_menus", {}).pop(menu_id, None)
+        await self.store.async_save()
