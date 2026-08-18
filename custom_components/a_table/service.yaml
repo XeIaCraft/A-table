@@ -1,0 +1,120 @@
+add_recipe:
+  name: Ajouter une recette
+  description: Crée une recette minimale et ajoute sa carte dans À cuisiner.
+  fields:
+    title:
+      name: Nom de la recette
+      required: true
+      selector:
+        text:
+    servings:
+      name: Portions
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+    cooking_minutes:
+      name: Temps de cuisson
+      selector:
+        number:
+          min: 0
+          max: 1440
+          unit_of_measurement: min
+          mode: box
+    tags:
+      name: Tags
+      description: Une liste de mots-clés, par exemple pâtes, végétarien.
+      selector:
+        text:
+          multiple: true
+
+move_meal_card:
+  name: Déplacer une carte-repas
+  description: Déplace une carte vers À cuisiner ou un jour de la semaine.
+  fields:
+    meal_card_id:
+      name: ID de la carte-repas
+      required: true
+      selector:
+        text:
+    placement:
+      name: Emplacement
+      required: true
+      selector:
+        select:
+          options:
+            - label: À cuisiner
+              value: backlog
+            - label: Lundi
+              value: monday
+            - label: Mardi
+              value: tuesday
+            - label: Mercredi
+              value: wednesday
+            - label: Jeudi
+              value: thursday
+            - label: Vendredi
+              value: friday
+            - label: Samedi
+              value: saturday
+            - label: Dimanche
+              value: sunday
+    position:
+      name: Position
+      description: Position facultative dans la colonne.
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: box
+
+cook_meal_card:
+  name: Marquer une carte comme cuisinée
+  description: Archive une carte active avec la date réelle de cuisson.
+  fields:
+    meal_card_id:
+      name: ID de la carte-repas
+      required: true
+      selector:
+        text:
+
+generate_draft:
+  name: Générer des propositions de repas
+  description: Génère un brouillon de propositions de repas via IA.
+  fields:
+    count:
+      name: Nombre de propositions
+      default: 6
+      selector:
+        number:
+          min: 1
+          max: 10
+          mode: box
+
+validate_draft:
+  name: Valider un brouillon
+  description: Crée les recettes et cartes à partir d'un brouillon.
+  fields:
+    draft_id:
+      name: ID du brouillon
+      required: true
+      selector:
+        text:
+    selected_indices:
+      name: Indices sélectionnés
+      description: Liste des indices de propositions à valider.
+      selector:
+        text:
+          multiple: true
+    modifications:
+      name: Modifications
+      description: Modifications optionnelles par proposition.
+      selector:
+        object:
+
+clear_cards_and_history:
+  name: Vider cartes et historique
+  description: Supprime toutes les recettes, cartes, brouillons et l'historique, mais conserve les préférences.
+  fields: {}
