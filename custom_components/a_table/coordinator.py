@@ -61,6 +61,7 @@ class ATableCoordinator:
             "price_per_serving": None,
             "last_cooked_at": None,
             "times_cooked": 0,
+            "ratings": [],
             "created_at": now,
             "updated_at": now,
         }
@@ -320,17 +321,36 @@ class ATableCoordinator:
                 title = recipe.get("title", "Recette inconnue")
                 date = h.get("cooked_at", "")[:10]
                 hist_lines.append(f"- {date} : {title}")
-            max_rec = rules.get("max_recurrence", 1)
-            lines.append(f"- Historique récent (max {max_rec} occurrence(s) de plats similaires) :\n" + "\n".join(hist_lines))
+            lines.append(f"- Historique récent :\n" + "\n".join(hist_lines))
         else:
             lines.append("- Historique récent : aucun repas cuisiné sur cette période.")
+
+        favorite_titles = [r.get("title", "") for r in recipes.values() if r.get("is_favorite") and r.get("title")]
+        liked_ratings = []
+        disliked_ratings = []
+        for r in recipes.values():
+            title = r.get("title", "")
+            if not title:
+                continue
+            for rating in r.get("ratings", [])[-3:]:
+                if rating.get("liked"):
+                    liked_ratings.append(title)
+                else:
+                    disliked_ratings.append(title)
+        if favorite_titles or liked_ratings or disliked_ratings:
+            fav_lines = []
+            if favorite_titles:
+                fav_lines.append("- Recettes favorites : " + ", ".join(sorted(set(favorite_titles))[:15]) + ".")
+            if liked_ratings:
+                fav_lines.append("- Recettes appréciées (👍), à pouvoir refaire occasionnellement : " + ", ".join(sorted(set(liked_ratings))[:15]) + ".")
+            if disliked_ratings:
+                fav_lines.append("- Recettes à éviter (👎) : " + ", ".join(sorted(set(disliked_ratings))[:15]) + ".")
+            lines.append("- Favoris et retours :\n" + "\n".join(fav_lines))
 
         if prefs.get("include_personal_recipes_in_context", True):
             titles = [r.get("title", "") for r in recipes.values() if r.get("title")]
             if titles:
-                min_new_pct = rules.get("min_new_recipes_pct", 90)
                 lines.append(f"- Bibliothèque personnelle (titres) :\n" + "\n".join(f"- {t}" for t in titles[:60]))
-                lines.append(f"- Objectif : environ {min_new_pct}% de nouvelles recettes (pas dans cette bibliothèque).")
             else:
                 lines.append("- Bibliothèque personnelle : aucune recette enregistrée.")
         else:
@@ -345,12 +365,19 @@ class ATableCoordinator:
         else:
             lines.append("- Sources culinaires : désactivées.")
 
-        max_fav = rules.get("max_favorites", 2)
-        lines.append(f"- Max recettes favorites / très appréciées : {max_fav}.")
-
         custom = prefs.get("custom_context", "")
         if custom:
             lines.append(f"- Autre consigne utilisateur : {custom}.")
+
+        max_fav = rules.get("max_favorites", 2)
+        max_rec = rules.get("max_recurrence", 1)
+        min_new_pct = rules.get("min_new_recipes_pct", 90)
+        lines.append(
+            "- QUOTAS DE DIVERSITÉ À RESPECTER STRICTEMENT :\n"
+            f"- Au maximum {max_fav} proposition(s) parmi les recettes favorites ou évaluées positivement (👍) ci-dessus.\n"
+            f"- Au maximum {max_rec} répétition(s) d'un plat identique ou très similaire à l'historique récent.\n"
+            f"- Au moins {min_new_pct}% des propositions doivent être de nouvelles recettes, absentes de la bibliothèque personnelle listée ci-dessus."
+        )
 
         return "\n".join(lines)
 
@@ -424,6 +451,7 @@ class ATableCoordinator:
                 "price_per_serving": proposal.get("price_per_serving"),
                 "last_cooked_at": None,
                 "times_cooked": 0,
+                "ratings": [],
                 "created_at": dt_util.now().isoformat(),
                 "updated_at": dt_util.now().isoformat(),
             }
@@ -467,6 +495,68 @@ class ATableCoordinator:
             if card["status"] == STATUS_ACTIVE and card["placement"] == placement
         ]
         return max(positions, default=-1) + 1
+
+    async def async_toggle_favorite(self, recipe_id: str) -> dict[str, Any]:
+        """Bascule le statut favori d'une recette."""
+        recipe = self.store.data["recipes"].get(recipe_id)
+        if recipe is None:
+            raise ValueError("Recette introuvable")
+
+        recipe["is_favorite"] = not recipe.get("is_favorite", False)
+        recipe["updated_at"] = dt_util.now().isoformat()
+
+        await self.store.async_save()
+        return recipe
+
+    async def async_rate_recipe(
+        self,
+        recipe_id: str,
+        liked: bool,
+        comment: str = "",
+    ) -> dict[str, Any]:
+        """Ajoute un retour (aimé/pas aimé + commentaire) à une recette."""
+        recipe = self.store.data["recipes"].get(recipe_id)
+        if recipe is None:
+            raise ValueError("Recette introuvable")
+
+        rating = {
+            "date": dt_util.now().isoformat(),
+            "liked": liked,
+            "comment": comment,
+        }
+        recipe.setdefault("ratings", []).append(rating)
+        recipe["updated_at"] = dt_util.now().isoformat()
+
+        await self.store.async_save()
+        return recipe
+
+    async def async_add_recipe_to_backlog(
+        self,
+        recipe_id: str,
+        servings: int | None = None,
+    ) -> dict[str, Any]:
+        """Ajoute une carte dans À cuisiner à partir d'une recette existante."""
+        recipe = self.store.data["recipes"].get(recipe_id)
+        if recipe is None:
+            raise ValueError("Recette introuvable")
+
+        now = dt_util.now().isoformat()
+        card_id = f"meal_{uuid4().hex}"
+        card = {
+            "id": card_id,
+            "recipe_id": recipe_id,
+            "status": STATUS_ACTIVE,
+            "placement": "backlog",
+            "position": self._next_position("backlog"),
+            "servings": servings or recipe.get("servings", 2),
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        self.store.data["meal_cards"][card_id] = card
+        await self.store.async_save()
+
+        return card
 
     async def async_update_preferences(self, preferences: dict[str, Any]) -> None:
         """Met à jour les préférences de manière non destructive."""

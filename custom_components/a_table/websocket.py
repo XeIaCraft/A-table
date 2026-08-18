@@ -28,6 +28,9 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_update_temporary_ingredient)
     websocket_api.async_register_command(hass, websocket_remove_temporary_ingredient)
     websocket_api.async_register_command(hass, websocket_clear_cards_and_history)
+    websocket_api.async_register_command(hass, websocket_toggle_favorite)
+    websocket_api.async_register_command(hass, websocket_rate_recipe)
+    websocket_api.async_register_command(hass, websocket_add_recipe_to_backlog)
 
 
 @callback
@@ -361,3 +364,88 @@ async def websocket_clear_cards_and_history(
         return
 
     connection.send_result(msg["id"], coordinator.get_data())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/toggle_favorite",
+        vol.Required("recipe_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_toggle_favorite(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Bascule le statut favori d'une recette."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        recipe = await coordinator.async_toggle_favorite(msg["recipe_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], recipe)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/rate_recipe",
+        vol.Required("recipe_id"): str,
+        vol.Required("liked"): bool,
+        vol.Optional("comment", default=""): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_rate_recipe(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Ajoute un retour (aimé/pas aimé + commentaire) à une recette."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        recipe = await coordinator.async_rate_recipe(
+            recipe_id=msg["recipe_id"],
+            liked=msg["liked"],
+            comment=msg.get("comment", ""),
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], recipe)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/add_recipe_to_backlog",
+        vol.Required("recipe_id"): str,
+        vol.Optional("servings"): vol.All(
+            vol.Coerce(int),
+            vol.Range(min=1, max=20),
+        ),
+    }
+)
+@websocket_api.async_response
+async def websocket_add_recipe_to_backlog(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Ajoute une carte dans À cuisiner à partir d'une recette existante."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        card = await coordinator.async_add_recipe_to_backlog(
+            recipe_id=msg["recipe_id"],
+            servings=msg.get("servings"),
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], card)

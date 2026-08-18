@@ -76,6 +76,31 @@ function cloneValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+const ICONS = {
+  grip: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true"><circle cx="6" cy="4.5" r="1.4"/><circle cx="14" cy="4.5" r="1.4"/><circle cx="6" cy="10" r="1.4"/><circle cx="14" cy="10" r="1.4"/><circle cx="6" cy="15.5" r="1.4"/><circle cx="14" cy="15.5" r="1.4"/></svg>',
+  check: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4L16 6"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="12" r="7.6" stroke-dasharray="2.4 2.8"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8" stroke-dasharray="38 12"/><path d="M12 4l3 3-3 3"/></svg>',
+  close: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg>',
+  edit: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.7 3.6l3.7 3.7-9 9-4.2.9.9-4.2 8.6-9.4z"/><path d="M11 5.3l3.7 3.7"/></svg>',
+  trash: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6h11M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6m-6.5 0 .7 9.4A1.5 1.5 0 0 0 7.7 17h4.6a1.5 1.5 0 0 0 1.5-1.6L14.5 6"/></svg>',
+  star: '<svg viewBox="0 0 20 20" class="icon icon-star" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M10 2.6l2.24 4.66 5.06.75-3.66 3.6.87 5.1L10 14.4l-4.51 2.31.87-5.1-3.66-3.6 5.06-.75L10 2.6z"/></svg>',
+  library: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18.5V5a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v13"/><path d="M6.3 17H19a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H6.3A2.3 2.3 0 0 1 4 17.7a1 1 0 0 1 1-1h1.3"/></svg>',
+  history: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3"/><path d="M3.3 3.8v4.4h4.4"/><path d="M12 7.5V12l3 2"/></svg>',
+  thumbUp: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8.5" width="3" height="8" rx="1"/><path d="M8.5 8.5l2.7-5.2a1.3 1.3 0 0 1 2.4.8l-.9 3.9h3.1a1.6 1.6 0 0 1 1.55 2l-1.3 5.2A1.6 1.6 0 0 1 14.5 16.5H8.5v-8z"/></svg>',
+  thumbDown: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.5" width="3" height="8" rx="1"/><path d="M8.5 11.5l2.7 5.2a1.3 1.3 0 0 0 2.4-.8l-.9-3.9h3.1a1.6 1.6 0 0 0 1.55-2l-1.3-5.2A1.6 1.6 0 0 0 14.5 3.5H8.5v8z"/></svg>',
+  search: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5"/><path d="M16.5 16.5l-4-4"/></svg>',
+  plate: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.6"/></svg>',
+  eye: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 10S4.5 4 10 4s8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6z"/><circle cx="10" cy="10" r="2.3"/></svg>',
+  plus: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>',
+};
+
+function icon(name, extraClass) {
+  const svg = ICONS[name];
+  if (!svg) return "";
+  return extraClass ? svg.replace('class="icon', `class="icon ${extraClass}`) : svg;
+}
+
 class ATableCard extends HTMLElement {
   constructor() {
     super();
@@ -157,20 +182,25 @@ class ATableCard extends HTMLElement {
     const recipe = this._recipe(card);
     const cooking = Number.isInteger(recipe.cooking_minutes) ? `${recipe.cooking_minutes} min` : "Cuisson à préciser";
     const tags = (recipe.tags || []).slice(0, 3);
+    const favoriteMark = recipe.is_favorite ? `<span class="meal-fav">${icon("star", "is-active")}</span>` : "";
     return `<article class="meal" data-card-id="${this._esc(card.id)}">
-      <button class="grip" type="button" data-grip="${this._esc(card.id)}" aria-label="Déplacer ${this._esc(recipe.title)}" title="Maintenir puis déplacer">⠿</button>
+      <button class="grip" type="button" data-grip="${this._esc(card.id)}" aria-label="Déplacer ${this._esc(recipe.title)}" title="Maintenir puis déplacer">${icon("grip")}</button>
       <button class="meal-main" type="button" data-detail="${this._esc(card.id)}">
-        <strong>${this._esc(recipe.title)}</strong>
+        <strong>${favoriteMark}${this._esc(recipe.title)}</strong>
         <span class="meta">${this._esc(cooking)} · ${this._esc(card.servings || recipe.servings || 2)} pers.</span>
         ${tags.length ? `<span class="tags">${tags.map((tag) => `<i>${this._esc(tag)}</i>`).join("")}</span>` : ""}
       </button>
-      <button class="cook" type="button" data-cook="${this._esc(card.id)}" aria-label="Marquer comme cuisiné" title="Cuisiné">✓</button>
+      <button class="cook" type="button" data-cook="${this._esc(card.id)}" aria-label="Marquer comme cuisiné" title="Cuisiné">${icon("check")}</button>
     </article>`;
+  }
+
+  _emptyHTML(text, iconName = "plate") {
+    return `<div class="empty">${icon(iconName)}<span>${text}</span></div>`;
   }
 
   _dayHTML(key, label) {
     const cards = this._cards(key);
-    return `<section class="day"><header><span>${label}</span><b>${cards.length}</b></header><div class="zone" data-zone="${key}">${cards.length ? cards.map((card) => this._mealHTML(card)).join("") : `<span class="empty">Dépose ici</span>`}</div></section>`;
+    return `<section class="day"><header><span>${label}</span><b>${cards.length}</b></header><div class="zone" data-zone="${key}">${cards.length ? cards.map((card) => this._mealHTML(card)).join("") : this._emptyHTML("Dépose ici")}</div></section>`;
   }
 
   _tempIngredientHTML(ing) {
@@ -178,8 +208,8 @@ class ATableCard extends HTMLElement {
     const note = ing.note ? ` (${ing.note})` : "";
     return `<div class="temp-ing" data-ing-id="${this._esc(ing.id)}">
       <span class="temp-ing-name">${this._esc(ing.quantity || "")} ${this._esc(ing.unit || "")} ${this._esc(ing.name || "")}${note}${date}</span>
-      <button class="temp-ing-edit" type="button" data-edit="${this._esc(ing.id)}">✏️</button>
-      <button class="temp-ing-remove" type="button" data-remove="${this._esc(ing.id)}">🗑️</button>
+      <button class="temp-ing-edit" type="button" data-edit="${this._esc(ing.id)}" aria-label="Modifier">${icon("edit")}</button>
+      <button class="temp-ing-remove" type="button" data-remove="${this._esc(ing.id)}" aria-label="Supprimer">${icon("trash")}</button>
     </div>`;
   }
 
@@ -191,68 +221,112 @@ class ATableCard extends HTMLElement {
     const error = this._data?.error;
 
     this.shadowRoot.innerHTML = `<style>
-      :host{display:block;width:100%;font-family:var(--primary-font-family,system-ui,sans-serif);color:var(--primary-text-color,#f4f6fa)}
+      :host{
+        display:block;width:100%;
+        font-family:var(--primary-font-family,system-ui,sans-serif);
+        color:var(--primary-text-color,#f4f6fa);
+        --at-space-1:4px; --at-space-2:8px; --at-space-3:12px; --at-space-4:16px; --at-space-5:24px;
+        --at-radius-sm:9px; --at-radius-md:13px; --at-radius-lg:19px;
+        --at-border:color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);
+        --at-surface-1:color-mix(in srgb,var(--card-background-color,#171a20) 94%,var(--primary-text-color,#fff));
+        --at-surface-2:color-mix(in srgb,var(--card-background-color,#171a20) 88%,var(--primary-text-color,#fff));
+        --at-ease:cubic-bezier(.32,.72,.35,1);
+        accent-color:var(--primary-color,#4f98a3);
+      }
       *{box-sizing:border-box}
-      .app{width:100%;background:var(--card-background-color,#171a20);border-radius:18px;padding:clamp(14px,2vw,24px);overflow:hidden}
-      .top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+      @media (prefers-reduced-motion: reduce){
+        *{transition-duration:.001ms !important;animation-duration:.001ms !important}
+      }
+      .app{width:100%;background:var(--card-background-color,#171a20);border-radius:var(--at-radius-lg);padding:clamp(14px,2vw,24px);overflow:hidden}
+      .top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:var(--at-space-5)}
       .eyebrow{margin:0 0 4px;color:var(--secondary-text-color,#aeb7c5);font-size:12px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
-      h1{margin:0;font-size:clamp(23px,2.4vw,30px);line-height:1.1}
+      h1{margin:0;font-size:clamp(24px,2.5vw,31px);line-height:1.1;font-weight:800;letter-spacing:-.01em}
       .sub{margin:6px 0 0;color:var(--secondary-text-color,#aeb7c5);font-size:14px}
-      .refresh,.counter button,.generate,.add,.grip,.meal-main,.cook,.close,.cancel,.save,.settings,.temp-ing-edit,.temp-ing-remove{font:inherit;cursor:pointer}
-      .refresh,.settings{width:44px;height:44px;border:0;border-radius:12px;background:color-mix(in srgb,var(--card-background-color,#171a20) 88%,var(--primary-text-color,#fff));color:inherit;font-size:20px}
-      .top-actions{display:flex;gap:8px}
-      .generator{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);border-radius:14px;background:color-mix(in srgb,var(--card-background-color,#171a20) 94%,var(--primary-text-color,#fff));margin-bottom:16px}
-      .generator strong{font-size:14px}
+      .icon{width:18px;height:18px;display:block;flex-shrink:0}
+      .icon-star{fill:none}
+      .icon-star.is-active{fill:currentColor}
+      button{font-family:inherit}
+      .refresh,.counter button,.generate,.add,.grip,.meal-main,.cook,.close,.cancel,.save,.settings,.temp-ing-edit,.temp-ing-remove,.icon-btn{font:inherit;cursor:pointer;transition:transform 150ms var(--at-ease),background-color 150ms var(--at-ease),color 150ms var(--at-ease),opacity 150ms var(--at-ease)}
+      button:active{transform:scale(.96)}
+      :host(*) button:focus-visible,:host(*) input:focus-visible,:host(*) select:focus-visible,:host(*) textarea:focus-visible,:host(*) [tabindex]:focus-visible{
+        outline:2px solid var(--primary-color,#4f98a3);outline-offset:2px;border-radius:6px;
+      }
+      .icon-btn{width:44px;height:44px;border:0;border-radius:var(--at-radius-md);background:var(--at-surface-2);color:inherit;display:grid;place-items:center}
+      .icon-btn:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 16%,var(--at-surface-2))}
+      .icon-btn.is-active,.icon-btn .icon-star.is-active{color:var(--primary-color,#4f98a3)}
+      .fav-btn.is-active{color:#e3b341}
+      .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+      .generator{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);margin-bottom:var(--at-space-4)}
+      .generator strong{font-size:14px;font-weight:750}
       .generator-actions,.counter{display:flex;align-items:center;gap:8px}
-      .counter button{width:38px;height:38px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 14%,transparent);border-radius:10px;background:transparent;color:inherit;font-size:20px}
+      .counter button{width:38px;height:38px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:transparent;color:inherit;font-size:19px}
+      .counter button:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 12%,transparent);border-color:var(--primary-color,#4f98a3)}
       .counter span{width:28px;text-align:center;font-weight:750;font-variant-numeric:tabular-nums}
-      .generate,.add,.save{min-height:40px;border:0;border-radius:10px;padding:0 14px;background:var(--primary-color,#4f98a3);color:var(--text-primary-color,#fff);font-weight:750}
-      .temp-section{margin-bottom:16px;padding:14px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);border-radius:14px;background:color-mix(in srgb,var(--card-background-color,#171a20) 92%,var(--primary-text-color,#fff))}
-      .temp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:14px;font-weight:700}
+      .generate,.add,.save{min-height:40px;border:0;border-radius:var(--at-radius-sm);padding:0 14px;background:var(--primary-color,#4f98a3);color:var(--text-primary-color,#fff);font-weight:750;box-shadow:0 2px 10px color-mix(in srgb,var(--primary-color,#4f98a3) 35%,transparent)}
+      .generate:hover,.add:hover,.save:hover{filter:brightness(1.08)}
+      .save:disabled{opacity:.5;cursor:not-allowed;filter:none;box-shadow:none}
+      .temp-section{margin-bottom:var(--at-space-4);padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:color-mix(in srgb,var(--card-background-color,#171a20) 92%,var(--primary-text-color,#fff))}
+      .temp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:14px;font-weight:750}
       .temp-list{display:flex;flex-wrap:wrap;gap:8px}
-      .temp-ing{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px;background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent);font-size:12px}
+      .temp-ing{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 10px;border-radius:var(--at-radius-sm);background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent);font-size:12px}
       .temp-ing-name{color:var(--secondary-text-color,#aeb7c5)}
-      .temp-ing-edit,.temp-ing-remove{width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:inherit;font-size:14px}
-      .add-temp{margin-top:8px;font-size:12px;color:var(--primary-color,#4f98a3);background:none;border:0;padding:0}
-      .backlog{padding:12px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);border-radius:14px;margin-bottom:16px;background:color-mix(in srgb,var(--card-background-color,#171a20) 92%,var(--primary-text-color,#fff))}
-      .section-head,.day header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:14px;font-weight:750}
-      .section-head b,.day header b{min-width:23px;padding:2px 7px;border-radius:99px;text-align:center;font-size:12px;color:var(--secondary-text-color,#aeb7c5);background:color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent)}
+      .temp-ing-edit,.temp-ing-remove{width:26px;height:26px;border:0;border-radius:7px;background:transparent;color:var(--secondary-text-color,#aeb7c5);display:grid;place-items:center}
+      .temp-ing-edit:hover,.temp-ing-remove:hover{background:color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);color:var(--primary-text-color,#f4f6fa)}
+      .temp-ing-edit .icon,.temp-ing-remove .icon{width:14px;height:14px}
+      .add-temp{margin-top:8px;font-size:12px;color:var(--primary-color,#4f98a3);background:none;border:0;padding:0;font-weight:700}
+      .backlog{padding:var(--at-space-3);border:1px solid var(--at-border);border-radius:var(--at-radius-md);margin-bottom:var(--at-space-4);background:color-mix(in srgb,var(--card-background-color,#171a20) 92%,var(--primary-text-color,#fff))}
+      .section-head,.day header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:750;text-transform:uppercase;letter-spacing:.03em;color:var(--secondary-text-color,#aeb7c5)}
+      .section-head b,.day header b{min-width:23px;padding:2px 7px;border-radius:99px;text-align:center;font-size:12px;color:var(--secondary-text-color,#aeb7c5);background:color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);text-transform:none;letter-spacing:normal}
       .backlog-scroll{overflow-x:auto;overflow-y:hidden;padding:10px 1px 4px;scroll-behavior:auto}
       .backlog-zone{display:flex;gap:10px;min-width:max-content;min-height:102px}
       .backlog-zone .meal{flex:0 0 250px;width:250px}
       .week-scroll{width:100%;overflow-x:auto;overflow-y:hidden;padding:0 0 9px;scroll-behavior:auto;overscroll-behavior-x:contain}
       .week{display:grid;grid-template-columns:repeat(7,230px);gap:10px;min-width:max-content}
-      .day{min-height:280px;padding:10px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);border-radius:14px;background:color-mix(in srgb,var(--card-background-color,#171a20) 94%,var(--primary-text-color,#fff))}
-      .zone{min-height:210px;display:flex;flex-direction:column;gap:8px;padding-top:10px;border-radius:10px}
+      .day{min-height:280px;padding:10px;border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1)}
+      .zone{min-height:210px;display:flex;flex-direction:column;gap:8px;padding-top:10px;border-radius:10px;transition:background-color 150ms var(--at-ease)}
       .zone.over,.backlog-zone.over{outline:2px dashed var(--primary-color,#4f98a3);outline-offset:2px;background:color-mix(in srgb,var(--primary-color,#4f98a3) 7%,transparent)}
-      .empty{padding:12px 4px;color:var(--secondary-text-color,#aeb7c5);font-size:12px}
-      .meal{display:grid;grid-template-columns:27px minmax(0,1fr) 31px;align-items:start;gap:7px;padding:9px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);border-radius:12px;background:color-mix(in srgb,var(--card-background-color,#171a20) 88%,var(--primary-text-color,#fff));box-shadow:0 2px 8px rgba(0,0,0,.08)}
+      .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:22px 8px;color:var(--secondary-text-color,#aeb7c5);font-size:12px;text-align:center}
+      .empty .icon{width:22px;height:22px;opacity:.5}
+      .meal{display:grid;grid-template-columns:27px minmax(0,1fr) 31px;align-items:start;gap:7px;padding:9px;border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-2);box-shadow:0 1px 2px rgba(0,0,0,.06);transition:transform 160ms var(--at-ease),box-shadow 160ms var(--at-ease),opacity 160ms var(--at-ease)}
+      .meal:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,0,0,.16)}
       .meal.dragging{opacity:.35}
-      .grip{width:27px;height:31px;border:0;background:transparent;color:var(--secondary-text-color,#aeb7c5);font-size:17px;line-height:1;touch-action:none}
+      .meal-fav{display:inline-flex;vertical-align:-2px;margin-right:4px;color:#e3b341}
+      .meal-fav .icon{width:13px;height:13px}
+      .grip{width:27px;height:31px;border:0;background:transparent;color:var(--secondary-text-color,#aeb7c5);line-height:1;touch-action:none;display:grid;place-items:center;cursor:grab}
+      .grip:hover{color:var(--primary-text-color,#f4f6fa)}
       .meal-main{min-width:0;padding:0;border:0;text-align:left;background:transparent;color:inherit;display:grid;gap:4px}
-      .meal-main strong{display:block;font-size:14px;line-height:1.25}
+      .meal-main strong{display:block;font-size:14px;line-height:1.3;font-weight:700}
       .meta{display:block;color:var(--secondary-text-color,#aeb7c5);font-size:11px}
       .tags{display:flex;flex-wrap:wrap;gap:4px}
       .tags i{padding:2px 6px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 9%,transparent);color:var(--secondary-text-color,#aeb7c5);font-size:10px;font-style:normal}
-      .cook{width:31px;height:31px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 14%,transparent);border-radius:9px;background:transparent;color:var(--primary-color,#4f98a3);font-weight:800;font-size:17px}
-      .add-row{display:flex;justify-content:flex-end;margin-top:16px}
-      .overlay{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.48)}
-      .dialog{width:min(720px,100%);max-height:calc(100dvh - 32px);overflow:auto;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 14%,transparent);border-radius:16px;padding:18px;background:var(--card-background-color,#171a20);box-shadow:0 22px 56px rgba(0,0,0,.38)}
-      .dialog-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
-      .dialog h2{margin:0;font-size:20px}
-      .close{border:0;background:transparent;color:var(--secondary-text-color,#aeb7c5);font-size:25px}
+      .cook{width:31px;height:31px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:transparent;color:var(--primary-color,#4f98a3);display:grid;place-items:center}
+      .cook:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 14%,transparent);border-color:var(--primary-color,#4f98a3)}
+      .add-row{display:flex;justify-content:flex-end;margin-top:var(--at-space-4)}
+      .overlay{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.48);animation:at-fade 180ms var(--at-ease)}
+      .dialog{width:min(720px,100%);max-height:calc(100dvh - 32px);overflow:auto;border:1px solid var(--at-border);border-radius:var(--at-radius-lg);padding:20px;background:var(--card-background-color,#171a20);box-shadow:0 22px 56px rgba(0,0,0,.38);animation:at-pop 200ms var(--at-ease)}
+      .dialog-sm{width:min(420px,100%)}
+      .dialog-lg{width:min(900px,100%)}
+      @keyframes at-fade{from{opacity:0}to{opacity:1}}
+      @keyframes at-pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+      .dialog-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:var(--at-space-4)}
+      .dialog-top-actions{display:flex;align-items:center;gap:6px}
+      .dialog h2{margin:0;font-size:19px;font-weight:800;letter-spacing:-.01em}
+      .close{border:0;background:transparent;color:var(--secondary-text-color,#aeb7c5);width:36px;height:36px;border-radius:var(--at-radius-sm);display:grid;place-items:center}
+      .close:hover{background:color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);color:var(--primary-text-color,#f4f6fa)}
       .dialog label{display:grid;gap:6px;margin-top:11px;font-size:13px;font-weight:700}
-      .dialog input,.dialog select,.dialog textarea{min-height:42px;width:100%;padding:8px 10px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 14%,transparent);border-radius:10px;background:color-mix(in srgb,var(--card-background-color,#171a20) 94%,var(--primary-text-color,#fff));color:inherit;font:inherit}
+      .dialog input,.dialog select,.dialog textarea{min-height:42px;width:100%;padding:8px 10px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:var(--at-surface-1);color:inherit;font:inherit;transition:border-color 150ms var(--at-ease)}
+      .dialog input:hover,.dialog select:hover,.dialog textarea:hover{border-color:color-mix(in srgb,var(--primary-text-color,#fff) 28%,transparent)}
       .dialog textarea{min-height:80px;resize:vertical}
-      .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
-      .cancel{min-height:40px;padding:0 13px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 14%,transparent);border-radius:10px;background:transparent;color:inherit}
+      .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:var(--at-space-4)}
+      .cancel{min-height:40px;padding:0 13px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:transparent;color:inherit}
+      .cancel:hover{background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent)}
       .facts{display:grid;gap:12px;color:var(--secondary-text-color,#aeb7c5);font-size:14px}
       .facts strong{color:var(--primary-text-color,#f4f6fa)}
       .ghost{position:fixed;z-index:10001;width:230px;pointer-events:none;opacity:.94;transform:rotate(2deg);box-shadow:0 20px 45px rgba(0,0,0,.35)}
-      .toast{position:fixed;right:18px;bottom:18px;z-index:10002;max-width:340px;padding:12px 14px;border-radius:12px;background:var(--primary-text-color,#fff);color:var(--card-background-color,#111);box-shadow:0 10px 26px rgba(0,0,0,.25);font-size:14px}
+      .toast{position:fixed;right:18px;bottom:18px;z-index:10002;max-width:340px;padding:12px 14px;border-radius:var(--at-radius-sm);background:var(--primary-text-color,#fff);color:var(--card-background-color,#111);box-shadow:0 10px 26px rgba(0,0,0,.25);font-size:14px;animation:at-pop 200ms var(--at-ease)}
       .state{padding:48px 12px;text-align:center;color:var(--secondary-text-color,#aeb7c5)}
       .state.error{color:var(--error-color,#e57373)}
-      .proposal{padding:12px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);border-radius:12px;background:color-mix(in srgb,var(--card-background-color,#171a20) 94%,var(--primary-text-color,#fff));margin-bottom:10px}
+      .proposal{padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);margin-bottom:10px}
       .proposal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
       .proposal-head input[type="checkbox"]{width:20px;height:20px}
       .proposal-title{font-weight:700;font-size:14px}
@@ -263,26 +337,67 @@ class ATableCard extends HTMLElement {
       .nutrition-item{padding:6px;border-radius:8px;background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent);text-align:center}
       .nutrition-item b{display:block;font-size:12px;color:var(--primary-text-color,#f4f6fa)}
       .nutrition-item span{font-size:10px;color:var(--secondary-text-color,#aeb7c5)}
-      .settings-section{margin-top:16px;border-top:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);padding-top:14px}
-      .settings-section h3{margin:0 0 10px;font-size:15px;color:var(--primary-text-color,#f4f6fa)}
+      .settings-section{margin-top:var(--at-space-4);border-top:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);padding-top:14px}
+      .settings-section h3{margin:0 0 10px;font-size:14px;font-weight:800;color:var(--primary-text-color,#f4f6fa);letter-spacing:-.01em}
       .checkbox-group,.chip-group{display:flex;flex-wrap:wrap;gap:8px}
-      .checkbox-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color,#aeb7c5)}
-      .checkbox-item.disabled{opacity:.45}
-      .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent);font-size:12px;color:var(--secondary-text-color,#aeb7c5)}
-      .chip button{border:0;background:transparent;color:inherit;font-size:14px;cursor:pointer}
+      .checkbox-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color,#aeb7c5);transition:opacity 150ms var(--at-ease)}
+      .checkbox-item.disabled{opacity:.4}
+      .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 6px 5px 10px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent);font-size:12px;color:var(--secondary-text-color,#aeb7c5);transition:background-color 150ms var(--at-ease)}
+      .chip button{border:0;background:transparent;color:inherit;font-size:14px;cursor:pointer;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;line-height:1}
+      .chip button:hover{background:color-mix(in srgb,var(--primary-text-color,#fff) 18%,transparent);color:var(--primary-text-color,#f4f6fa)}
+      .filter-chip{border:1px solid var(--at-border);cursor:pointer}
+      .filter-chip.is-active{background:var(--primary-color,#4f98a3);color:var(--text-primary-color,#fff);border-color:transparent}
       .row{display:flex;gap:10px;align-items:center}
       .row > *{flex:1}
-      .tabs{display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);padding-bottom:8px;flex-wrap:wrap}
-      .tab{padding:6px 10px;border-radius:8px;background:transparent;border:0;color:var(--secondary-text-color,#aeb7c5);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
-      .tab.active{background:color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);color:var(--primary-text-color,#f4f6fa)}
-      .tab-content{display:none}
+      .tabs{display:flex;gap:6px;margin-bottom:var(--at-space-4);border-bottom:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);padding-bottom:8px;flex-wrap:wrap}
+      .tab{padding:7px 11px;border-radius:99px;background:transparent;border:0;color:var(--secondary-text-color,#aeb7c5);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+      .tab:hover{background:color-mix(in srgb,var(--primary-text-color,#fff) 7%,transparent)}
+      .tab.active{background:var(--primary-color,#4f98a3);color:var(--text-primary-color,#fff)}
+      .tab-content{display:none;animation:at-fade 160ms var(--at-ease)}
       .tab-content.active{display:block}
       .readonly-input{pointer-events:none;opacity:0.7}
       .hidden{display:none}
+      .dialog input[type="range"]{-webkit-appearance:none;appearance:none;height:28px;background:transparent;padding:0;min-height:auto;border:0}
+      input[type="range"]::-webkit-slider-runnable-track{height:5px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 16%,transparent)}
+      input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6.5px;border-radius:50%;background:var(--primary-color,#4f98a3);border:3px solid var(--card-background-color,#171a20);box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
+      input[type="range"]::-moz-range-track{height:5px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 16%,transparent)}
+      input[type="range"]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--primary-color,#4f98a3);border:3px solid var(--card-background-color,#171a20);box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
+      .dialog input[type="checkbox"],.dialog input[type="radio"]{width:16px;min-height:16px;height:16px;flex-shrink:0;padding:0}
       .equipment-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;font-size:13px}
       .equipment-grid-head{font-weight:750;color:var(--secondary-text-color,#aeb7c5);font-size:11px;text-transform:uppercase;padding:0 0 8px}
       .equipment-row{display:contents}
-      .equipment-cell{display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 6%,transparent)}
+      .equipment-cell{display:flex;align-items:center;gap:6px;padding:7px 4px;border-bottom:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 6%,transparent)}
+      .library-search{display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:var(--at-surface-1);margin-top:var(--at-space-3)}
+      .library-search .icon{color:var(--secondary-text-color,#aeb7c5)}
+      .library-search input{border:0;background:transparent;padding-left:0}
+      .library-tags{margin-top:var(--at-space-3)}
+      .library-fav-filter{flex-direction:row;margin-top:var(--at-space-3);align-items:center}
+      .library-results{margin-top:var(--at-space-3);max-height:48vh;overflow:auto}
+      .library-list{display:grid;gap:8px}
+      .library-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:var(--at-surface-1)}
+      .library-item-main{display:grid;gap:3px;min-width:0}
+      .library-item-main strong{font-size:13px;font-weight:700}
+      .library-item-actions{display:flex;gap:6px;flex-shrink:0}
+      .library-item-actions .icon-btn{width:36px;height:36px}
+      .history-list{margin-top:var(--at-space-3);max-height:52vh;overflow:auto}
+      .history-items{display:grid;gap:6px}
+      .history-item{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--at-radius-sm);background:var(--at-surface-1);font-size:13px}
+      .history-date{color:var(--secondary-text-color,#aeb7c5);font-size:11px;font-weight:700;text-transform:uppercase}
+      .history-title{font-weight:600}
+      .history-meta{display:flex;align-items:center;gap:6px;color:var(--secondary-text-color,#aeb7c5);font-size:11px}
+      .history-rating-icon{width:14px;height:14px}
+      .rate-title{margin:6px 0 0;font-weight:700;font-size:15px}
+      .rate-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:var(--at-space-3)}
+      .rate-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);color:inherit}
+      .rate-btn .icon{width:26px;height:26px}
+      .rate-btn:hover{border-color:var(--primary-color,#4f98a3)}
+      .rate-btn.is-active{border-color:var(--primary-color,#4f98a3);background:color-mix(in srgb,var(--primary-color,#4f98a3) 14%,var(--at-surface-1));color:var(--primary-color,#4f98a3)}
+      @media(max-width:960px){
+        .equipment-grid{grid-template-columns:1fr}
+        .equipment-grid-head:nth-child(2){display:none}
+        .equipment-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:6px}
+        .equipment-row .equipment-cell:last-child{border-bottom:none;padding-left:0}
+      }
       @media(max-width:680px){
         .app{padding:14px;border-radius:14px}
         .generator{flex-wrap:wrap}
@@ -291,6 +406,8 @@ class ATableCard extends HTMLElement {
         .day{min-height:305px}
         .zone{min-height:230px}
         .backlog-zone .meal{flex-basis:260px;width:260px}
+        .rate-choice{grid-template-columns:1fr}
+        .dialog-lg,.dialog-sm{width:100%}
       }
     </style><section class="app">
       <header class="top">
@@ -298,8 +415,10 @@ class ATableCard extends HTMLElement {
           <h1>À table</h1>
         </div>
         <div class="top-actions">
-          <button class="settings" type="button" aria-label="Paramètres">⚙️</button>
-          <button class="refresh" type="button" aria-label="Actualiser">↻</button>
+          <button class="icon-btn" type="button" data-open-library aria-label="Mes recettes" title="Mes recettes">${icon("library")}</button>
+          <button class="icon-btn" type="button" data-open-history aria-label="Historique" title="Historique">${icon("history")}</button>
+          <button class="icon-btn settings" type="button" aria-label="Paramètres" title="Paramètres">${icon("settings")}</button>
+          <button class="icon-btn refresh" type="button" aria-label="Actualiser" title="Actualiser">${icon("refresh")}</button>
         </div>
       </header>
       ${this._loading
@@ -313,7 +432,7 @@ class ATableCard extends HTMLElement {
                 <button class="add-temp" type="button" data-add-temp>＋ Ajouter un aliment</button>
               </header>
               <div class="temp-list">
-                ${tempIngs.length ? tempIngs.map((ing) => this._tempIngredientHTML(ing)).join("") : `<span class="empty">Aucun aliment temporaire.</span>`}
+                ${tempIngs.length ? tempIngs.map((ing) => this._tempIngredientHTML(ing)).join("") : this._emptyHTML("Aucun aliment temporaire.")}
               </div>
             </section>
             <section class="generator">
@@ -334,7 +453,7 @@ class ATableCard extends HTMLElement {
               </header>
               <div class="backlog-scroll">
                 <div class="backlog-zone" data-zone="backlog">
-                  ${backlog.length ? backlog.map((card) => this._mealHTML(card)).join("") : `<span class="empty">Les recettes validées apparaîtront ici.</span>`}
+                  ${backlog.length ? backlog.map((card) => this._mealHTML(card)).join("") : this._emptyHTML("Les recettes validées apparaîtront ici.")}
                 </div>
               </div>
             </section>
@@ -359,6 +478,8 @@ class ATableCard extends HTMLElement {
     const root = this.shadowRoot;
     root.querySelector(".refresh")?.addEventListener("click", () => this._load());
     root.querySelector(".settings")?.addEventListener("click", () => this._openSettings());
+    root.querySelector("[data-open-library]")?.addEventListener("click", () => this._openLibrary());
+    root.querySelector("[data-open-history]")?.addEventListener("click", () => this._openHistory());
     root.querySelector(".add")?.addEventListener("click", () => this._openAdd());
     root.querySelector(".generate")?.addEventListener("click", () => this._generate());
     root.querySelectorAll("[data-count]").forEach((button) =>
@@ -496,9 +617,15 @@ class ATableCard extends HTMLElement {
 
   async _cook(id) {
     this._saveScroll();
+    const card = this._data?.meal_cards?.[id];
+    const recipeId = card?.recipe_id;
     try {
       await this._ws({ type: "a_table/cook_meal_card", meal_card_id: id });
       await this._load();
+      if (recipeId) {
+        this._modal = { type: "rate", recipe_id: recipeId };
+        this._mountModal();
+      }
     } catch (error) {
       this._toast(error?.message || "Impossible de marquer cette recette comme cuisinée.");
     }
@@ -543,6 +670,38 @@ class ATableCard extends HTMLElement {
       await this._load();
     } catch (error) {
       this._toast(error?.message || "Suppression impossible.");
+    }
+  }
+
+  _openLibrary() {
+    this._modal = { type: "library", search: "", tag: null, onlyFavorites: false };
+    this._mountModal();
+  }
+
+  _openHistory() {
+    this._modal = { type: "history", days: this._data?.preferences?.history_days_for_display ?? 20 };
+    this._mountModal();
+  }
+
+  async _toggleFavorite(recipeId) {
+    try {
+      const recipe = await this._ws({ type: "a_table/toggle_favorite", recipe_id: recipeId });
+      if (this._data?.recipes?.[recipeId]) {
+        this._data.recipes[recipeId] = recipe;
+      }
+      this._mountModal();
+    } catch (error) {
+      this._toast(error?.message || "Impossible de mettre à jour le favori.");
+    }
+  }
+
+  async _addRecipeToBacklog(recipeId) {
+    try {
+      await this._ws({ type: "a_table/add_recipe_to_backlog", recipe_id: recipeId });
+      await this._load();
+      this._toast("Recette ajoutée à À cuisiner.");
+    } catch (error) {
+      this._toast(error?.message || "Ajout impossible.");
     }
   }
 
@@ -593,7 +752,10 @@ class ATableCard extends HTMLElement {
       overlay.innerHTML = `<section class="dialog">
         <header class="dialog-top">
           <h2>${this._esc(recipe.title)}</h2>
-          <button class="close" type="button">×</button>
+          <div class="dialog-top-actions">
+            <button class="icon-btn fav-btn ${recipe.is_favorite ? "is-active" : ""}" type="button" data-toggle-favorite="${this._esc(card.recipe_id)}" aria-label="Basculer favori" title="Favori">${icon("star", recipe.is_favorite ? "is-active" : "")}</button>
+            <button class="close" type="button">${icon("close")}</button>
+          </div>
         </header>
         <div class="facts">
           <div><strong>Temps total</strong><br>${this._esc(recipe.cooking_minutes ?? "À préciser")} min</div>
@@ -624,7 +786,7 @@ class ATableCard extends HTMLElement {
         overlay.innerHTML = `<section class="dialog">
           <header class="dialog-top">
             <h2>Aucune proposition</h2>
-            <button class="close" type="button" data-close-draft>×</button>
+            <button class="close" type="button" data-close-draft>${icon("close")}</button>
           </header>
           <p class="state">Le brouillon est vide ou invalide.</p>
           <footer class="actions">
@@ -635,7 +797,7 @@ class ATableCard extends HTMLElement {
         overlay.innerHTML = `<section class="dialog">
           <header class="dialog-top">
             <h2>Valider les propositions</h2>
-            <button class="close" type="button" data-close-draft>×</button>
+            <button class="close" type="button" data-close-draft>${icon("close")}</button>
           </header>
           <div class="facts">
             ${proposals
@@ -685,7 +847,7 @@ class ATableCard extends HTMLElement {
       overlay.innerHTML = `<form class="dialog" novalidate>
         <header class="dialog-top">
           <h2>Ajouter une recette <span style="font-size:12px;color:var(--secondary-text-color,#aeb7c5);font-weight:normal">(Work in progress)</span></h2>
-          <button class="close" type="button">×</button>
+          <button class="close" type="button">${icon("close")}</button>
         </header>
         <label>Nom de la recette
           <input name="title" required autofocus placeholder="Ex. Curry de courgettes">
@@ -705,7 +867,7 @@ class ATableCard extends HTMLElement {
       overlay.innerHTML = `<form class="dialog" novalidate>
         <header class="dialog-top">
           <h2>Ajouter un aliment à utiliser rapidement</h2>
-          <button class="close" type="button">×</button>
+          <button class="close" type="button">${icon("close")}</button>
         </header>
         <label>Nom de l'aliment
           <input name="name" required autofocus placeholder="Ex. Tomates">
@@ -735,7 +897,7 @@ class ATableCard extends HTMLElement {
       overlay.innerHTML = `<form class="dialog" novalidate>
         <header class="dialog-top">
           <h2>Modifier l'aliment</h2>
-          <button class="close" type="button">×</button>
+          <button class="close" type="button">${icon("close")}</button>
         </header>
         <label>Nom de l'aliment
           <input name="name" required value="${this._esc(ing.name || "")}">
@@ -761,6 +923,31 @@ class ATableCard extends HTMLElement {
       </form>`;
     } else if (this._modal.type === "settings") {
       overlay.innerHTML = this._settingsModalHTML();
+    } else if (this._modal.type === "library") {
+      overlay.innerHTML = this._libraryModalHTML();
+    } else if (this._modal.type === "rate") {
+      const recipe = this._data?.recipes?.[this._modal.recipe_id];
+      if (!recipe) return;
+      overlay.innerHTML = `<section class="dialog dialog-sm">
+        <header class="dialog-top">
+          <h2>Comment était ce repas ?</h2>
+          <button class="close" type="button" data-skip-rating>${icon("close")}</button>
+        </header>
+        <p class="rate-title">${this._esc(recipe.title)}</p>
+        <div class="rate-choice">
+          <button class="rate-btn" type="button" data-rate="up" aria-label="J'ai aimé">${icon("thumbUp")}<span>J'ai aimé</span></button>
+          <button class="rate-btn" type="button" data-rate="down" aria-label="Je n'ai pas aimé">${icon("thumbDown")}<span>Je n'ai pas aimé</span></button>
+        </div>
+        <label>Commentaire (facultatif)
+          <textarea data-rate-comment placeholder="Ex. Un peu trop épicé pour les enfants"></textarea>
+        </label>
+        <footer class="actions">
+          <button class="cancel" type="button" data-skip-rating>Passer</button>
+          <button class="save" type="button" data-save-rating disabled>Enregistrer</button>
+        </footer>
+      </section>`;
+    } else if (this._modal.type === "history") {
+      overlay.innerHTML = this._historyModalHTML();
     }
 
     this.shadowRoot.append(overlay);
@@ -773,6 +960,9 @@ class ATableCard extends HTMLElement {
         const id = event.currentTarget.dataset.modalCook;
         this._closeModal();
         await this._cook(id);
+      });
+      overlay.querySelector("[data-toggle-favorite]")?.addEventListener("click", (event) => {
+        this._toggleFavorite(event.currentTarget.dataset.toggleFavorite);
       });
     } else if (this._modal.type === "validate") {
       overlay.querySelectorAll("[data-close-draft]").forEach((btn) => {
@@ -866,7 +1056,209 @@ class ATableCard extends HTMLElement {
       });
     } else if (this._modal.type === "settings") {
       this._bindSettingsModal(overlay);
+    } else if (this._modal.type === "library") {
+      this._bindLibraryModal(overlay);
+    } else if (this._modal.type === "rate") {
+      this._bindRateModal(overlay);
+    } else if (this._modal.type === "history") {
+      this._bindHistoryModal(overlay);
     }
+  }
+
+  // ---- Rating modal -------------------------------------------------------
+
+  _bindRateModal(overlay) {
+    let liked = null;
+    const saveBtn = overlay.querySelector("[data-save-rating]");
+    overlay.querySelectorAll("[data-rate]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        liked = btn.dataset.rate === "up";
+        overlay.querySelectorAll("[data-rate]").forEach((b) => b.classList.toggle("is-active", b === btn));
+        if (saveBtn) saveBtn.disabled = false;
+      });
+    });
+    overlay.querySelectorAll("[data-skip-rating]").forEach((btn) => {
+      btn.addEventListener("click", () => this._closeModal());
+    });
+    saveBtn?.addEventListener("click", async () => {
+      if (liked === null) return;
+      const comment = overlay.querySelector("[data-rate-comment]")?.value.trim() || "";
+      try {
+        await this._ws({ type: "a_table/rate_recipe", recipe_id: this._modal.recipe_id, liked, comment });
+        this._closeModal();
+        await this._load();
+        this._toast("Merci pour ton retour !");
+      } catch (error) {
+        this._toast(error?.message || "Impossible d'enregistrer ce retour.");
+      }
+    });
+  }
+
+  // ---- Library modal (Mes recettes) ---------------------------------------
+
+  _libraryRecipes() {
+    const state = this._modal;
+    const all = Object.values(this._data?.recipes || {}).filter((r) => !r.is_archived);
+    const search = (state.search || "").trim().toLowerCase();
+    return all
+      .filter((r) => !search || (r.title || "").toLowerCase().includes(search))
+      .filter((r) => !state.tag || (r.tags || []).includes(state.tag))
+      .filter((r) => !state.onlyFavorites || r.is_favorite)
+      .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  }
+
+  _libraryModalHTML() {
+    const state = this._modal;
+    const allTags = Array.from(new Set(Object.values(this._data?.recipes || {}).flatMap((r) => r.tags || []))).sort();
+    const results = this._libraryRecipes();
+
+    return `<section class="dialog dialog-lg">
+      <header class="dialog-top">
+        <h2>Mes recettes</h2>
+        <button class="close" type="button">${icon("close")}</button>
+      </header>
+      <div class="library-search">
+        ${icon("search")}
+        <input type="search" data-library-search placeholder="Rechercher par titre" value="${this._esc(state.search || "")}">
+      </div>
+      ${allTags.length ? `<div class="chip-group library-tags">
+        <button type="button" class="chip filter-chip ${!state.tag ? "is-active" : ""}" data-library-tag="">Tous</button>
+        ${allTags.map((tag) => `<button type="button" class="chip filter-chip ${state.tag === tag ? "is-active" : ""}" data-library-tag="${this._esc(tag)}">${this._esc(tag)}</button>`).join("")}
+      </div>` : ""}
+      <label class="checkbox-item library-fav-filter">
+        <input type="checkbox" data-library-fav ${state.onlyFavorites ? "checked" : ""}>
+        Favoris uniquement
+      </label>
+      <div class="library-results" data-library-results>
+        ${this._libraryResultsHTML(results)}
+      </div>
+      <footer class="actions">
+        <button class="cancel" type="button">Fermer</button>
+      </footer>
+    </section>`;
+  }
+
+  _libraryResultsHTML(results) {
+    if (!results.length) return this._emptyHTML("Aucune recette ne correspond à ce filtre.");
+    return `<div class="library-list">${results
+      .map((r) => {
+        const cooking = Number.isInteger(r.cooking_minutes) ? `${r.cooking_minutes} min` : "Cuisson à préciser";
+        const tags = (r.tags || []).slice(0, 3);
+        return `<article class="library-item">
+          <div class="library-item-main">
+            <strong>${r.is_favorite ? icon("star", "is-active") : ""}${this._esc(r.title)}</strong>
+            <span class="meta">${this._esc(cooking)} · cuisinée ${this._esc(r.times_cooked || 0)} fois${tags.length ? " · " + tags.map((t) => this._esc(t)).join(", ") : ""}</span>
+          </div>
+          <div class="library-item-actions">
+            <button class="icon-btn" type="button" data-library-detail="${this._esc(r.id)}" aria-label="Détails" title="Détails">${icon("eye")}</button>
+            <button class="icon-btn" type="button" data-library-add="${this._esc(r.id)}" aria-label="Ajouter au backlog" title="Ajouter à À cuisiner">${icon("plus")}</button>
+          </div>
+        </article>`;
+      })
+      .join("")}</div>`;
+  }
+
+  _bindLibraryModal(overlay) {
+    const refreshResults = () => {
+      const container = overlay.querySelector("[data-library-results]");
+      if (container) container.innerHTML = this._libraryResultsHTML(this._libraryRecipes());
+      bindResultActions();
+    };
+
+    const bindResultActions = () => {
+      overlay.querySelectorAll("[data-library-detail]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const recipeId = btn.dataset.libraryDetail;
+          const card = Object.values(this._data.meal_cards || {}).find((c) => c.recipe_id === recipeId);
+          if (card) {
+            this._openDetail(card.id);
+          } else {
+            this._toast("Ouvre les détails depuis À cuisiner ou la semaine une fois la recette ajoutée.");
+          }
+        });
+      });
+      overlay.querySelectorAll("[data-library-add]").forEach((btn) => {
+        btn.addEventListener("click", () => this._addRecipeToBacklog(btn.dataset.libraryAdd));
+      });
+    };
+
+    overlay.querySelector("[data-library-search]")?.addEventListener("input", (event) => {
+      this._modal.search = event.currentTarget.value;
+      refreshResults();
+    });
+    overlay.querySelectorAll("[data-library-tag]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this._modal.tag = btn.dataset.libraryTag || null;
+        this._mountModal();
+      });
+    });
+    overlay.querySelector("[data-library-fav]")?.addEventListener("change", (event) => {
+      this._modal.onlyFavorites = event.currentTarget.checked;
+      refreshResults();
+    });
+
+    bindResultActions();
+  }
+
+  // ---- History modal --------------------------------------------------
+
+  _historyEntries(days) {
+    const history = this._data?.history || [];
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    return history
+      .filter((h) => new Date(h.cooked_at || 0).getTime() >= cutoff)
+      .sort((a, b) => new Date(b.cooked_at || 0) - new Date(a.cooked_at || 0));
+  }
+
+  _historyModalHTML() {
+    const days = this._modal.days ?? 20;
+    const entries = this._historyEntries(days);
+    return `<section class="dialog">
+      <header class="dialog-top">
+        <h2>Historique</h2>
+        <button class="close" type="button">${icon("close")}</button>
+      </header>
+      <label>Historique affiché
+        <input type="range" min="5" max="30" value="${days}" data-history-range style="width:100%">
+        <div data-history-range-display style="text-align:right;font-size:12px;color:var(--secondary-text-color,#aeb7c5)">${days} derniers jours</div>
+      </label>
+      <div class="history-list" data-history-list>
+        ${this._historyListHTML(entries)}
+      </div>
+      <footer class="actions">
+        <button class="cancel" type="button">Fermer</button>
+      </footer>
+    </section>`;
+  }
+
+  _historyListHTML(entries) {
+    if (!entries.length) return this._emptyHTML("Aucun repas cuisiné sur cette période.");
+    return `<div class="history-items">${entries
+      .map((h) => {
+        const recipe = this._data?.recipes?.[h.recipe_id] || {};
+        const date = h.cooked_at ? new Date(h.cooked_at).toLocaleDateString(undefined, { day: "2-digit", month: "short" }) : "–";
+        const ratings = recipe.ratings || [];
+        const closest = ratings.length ? ratings[ratings.length - 1] : null;
+        const ratingIcon = closest ? icon(closest.liked ? "thumbUp" : "thumbDown", "history-rating-icon") : "";
+        return `<div class="history-item">
+          <span class="history-date">${date}</span>
+          <span class="history-title">${this._esc(recipe.title || "Recette inconnue")}</span>
+          <span class="history-meta">${this._esc(h.servings || recipe.servings || 2)} pers. ${ratingIcon}</span>
+        </div>`;
+      })
+      .join("")}</div>`;
+  }
+
+  _bindHistoryModal(overlay) {
+    const range = overlay.querySelector("[data-history-range]");
+    const display = overlay.querySelector("[data-history-range-display]");
+    const list = overlay.querySelector("[data-history-list]");
+    range?.addEventListener("input", () => {
+      const days = Number(range.value);
+      this._modal.days = days;
+      if (display) display.textContent = `${days} derniers jours`;
+      if (list) list.innerHTML = this._historyListHTML(this._historyEntries(days));
+    });
   }
 
   // ---- Settings modal ----------------------------------------------------
@@ -896,7 +1288,7 @@ class ATableCard extends HTMLElement {
     return `<form id="settings-form" class="dialog" novalidate>
       <header class="dialog-top">
         <h2>Paramètres</h2>
-        <button class="close" type="button">×</button>
+        <button class="close" type="button">${icon("close")}</button>
       </header>
       <div class="tabs">
         <button type="button" class="tab ${tab === "general" ? "active" : ""}" data-tab="general">Général</button>
@@ -956,9 +1348,13 @@ class ATableCard extends HTMLElement {
 
         <div class="settings-section">
           <h3>Historique</h3>
-          <label>Historique pris en compte
+          <label>Historique pris en compte pour l'IA
             <input name="history_days_for_generation" type="range" min="5" max="30" value="${prefs.history_days_for_generation ?? 20}" style="width:100%">
             <div data-history-display style="text-align:right;font-size:12px;color:var(--secondary-text-color,#aeb7c5)">Historique pris en compte : ${prefs.history_days_for_generation ?? 20} jours</div>
+          </label>
+          <label>Historique affiché par défaut
+            <input name="history_days_for_display" type="range" min="5" max="30" value="${prefs.history_days_for_display ?? 20}" style="width:100%">
+            <div data-history-display-value style="text-align:right;font-size:12px;color:var(--secondary-text-color,#aeb7c5)">Historique affiché : ${prefs.history_days_for_display ?? 20} jours</div>
           </label>
           <label>
             <input type="checkbox" name="include_personal_recipes_in_context" ${prefs.include_personal_recipes_in_context ? "checked" : ""}>
@@ -1265,12 +1661,19 @@ class ATableCard extends HTMLElement {
       });
     });
 
-    // History slider live display
+    // History sliders live display
     const historySlider = overlay.querySelector("[name='history_days_for_generation']");
     const historyDisplay = overlay.querySelector("[data-history-display]");
     if (historySlider && historyDisplay) {
       historySlider.addEventListener("input", () => {
         historyDisplay.textContent = `Historique pris en compte : ${historySlider.value} jours`;
+      });
+    }
+    const historyDisplaySlider = overlay.querySelector("[name='history_days_for_display']");
+    const historyDisplayValue = overlay.querySelector("[data-history-display-value]");
+    if (historyDisplaySlider && historyDisplayValue) {
+      historyDisplaySlider.addEventListener("input", () => {
+        historyDisplayValue.textContent = `Historique affiché : ${historyDisplaySlider.value} jours`;
       });
     }
 
@@ -1393,6 +1796,7 @@ class ATableCard extends HTMLElement {
       time_profile: String(data.get("time_profile") || "normal"),
       complexity: String(data.get("complexity") || "free"),
       history_days_for_generation: Number(data.get("history_days_for_generation") || 20),
+      history_days_for_display: Number(data.get("history_days_for_display") || 20),
       include_personal_recipes_in_context: !!data.get("include_personal_recipes_in_context"),
       custom_context: String(data.get("custom_context") || ""),
       macro_ratios: macros,
