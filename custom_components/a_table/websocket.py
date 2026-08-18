@@ -44,6 +44,12 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_refine_guest_course)
     websocket_api.async_register_command(hass, websocket_regenerate_wine_pairings)
     websocket_api.async_register_command(hass, websocket_dismiss_guest_menu)
+    websocket_api.async_register_command(hass, websocket_remove_meal_card)
+    websocket_api.async_register_command(hass, websocket_archive_recipe)
+    websocket_api.async_register_command(hass, websocket_unarchive_recipe)
+    websocket_api.async_register_command(hass, websocket_remove_history_entry)
+    websocket_api.async_register_command(hass, websocket_restore_history_entry)
+    websocket_api.async_register_command(hass, websocket_fetch_recipe_image)
 
 
 @callback
@@ -670,6 +676,8 @@ async def websocket_refine_proposal(
         vol.Required("type"): "a_table/generate_guest_menu",
         vol.Required("guests"): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
         vol.Optional("notes", default=""): str,
+        vol.Optional("course_keys"): [str],
+        vol.Optional("composed_keys"): [str],
     }
 )
 @websocket_api.async_response
@@ -685,6 +693,8 @@ async def websocket_generate_guest_menu(
         menu = await coordinator.async_generate_guest_menu(
             guests=msg["guests"],
             notes=msg["notes"],
+            course_keys=msg.get("course_keys"),
+            composed_keys=msg.get("composed_keys"),
         )
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_input", str(err))
@@ -791,3 +801,123 @@ async def websocket_dismiss_guest_menu(
     coordinator = _get_coordinator(hass)
     await coordinator.async_dismiss_guest_menu(msg["menu_id"])
     connection.send_result(msg["id"], coordinator.get_data())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/remove_meal_card",
+        vol.Required("meal_card_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_remove_meal_card(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Supprime définitivement une carte repas."""
+    coordinator = _get_coordinator(hass)
+    await coordinator.async_remove_meal_card(msg["meal_card_id"])
+    connection.send_result(msg["id"], coordinator.get_data())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/archive_recipe",
+        vol.Required("recipe_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_archive_recipe(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Archive une recette (masquée de la bibliothèque)."""
+    coordinator = _get_coordinator(hass)
+    try:
+        recipe = await coordinator.async_archive_recipe(msg["recipe_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+    connection.send_result(msg["id"], recipe)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/unarchive_recipe",
+        vol.Required("recipe_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_unarchive_recipe(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Désarchive une recette."""
+    coordinator = _get_coordinator(hass)
+    try:
+        recipe = await coordinator.async_unarchive_recipe(msg["recipe_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+    connection.send_result(msg["id"], recipe)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/remove_history_entry",
+        vol.Required("history_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_remove_history_entry(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Supprime une entrée d'historique."""
+    coordinator = _get_coordinator(hass)
+    await coordinator.async_remove_history_entry(msg["history_id"])
+    connection.send_result(msg["id"], coordinator.get_data())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/restore_history_entry",
+        vol.Required("entry"): dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_restore_history_entry(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Réinsère une entrée d'historique supprimée (annulation)."""
+    coordinator = _get_coordinator(hass)
+    await coordinator.async_restore_history_entry(msg["entry"])
+    connection.send_result(msg["id"], coordinator.get_data())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/fetch_recipe_image",
+        vol.Required("recipe_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_fetch_recipe_image(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Cherche une illustration pour une recette via Google Custom Search."""
+    coordinator = _get_coordinator(hass)
+    try:
+        recipe = await coordinator.async_fetch_recipe_image(msg["recipe_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+    connection.send_result(msg["id"], recipe)

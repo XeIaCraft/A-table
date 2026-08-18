@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
 from .const import PLACEMENTS, STATUS_ACTIVE, STATUS_COOKED
@@ -729,20 +730,25 @@ class ATableCoordinator:
 
     def _build_refine_instructions(self, current_recipe: dict[str, Any], user_message: str) -> str:
         """Construit le prompt de modification ciblée d'une recette/proposition existante."""
-        current_json = json.dumps(
-            {
-                "title": current_recipe.get("title"),
-                "servings": current_recipe.get("servings"),
-                "cooking_minutes": current_recipe.get("cooking_minutes"),
-                "ingredients": current_recipe.get("ingredients", []),
-                "steps": current_recipe.get("steps", []),
-                "notes": current_recipe.get("notes", ""),
-                "nutrition": current_recipe.get("nutrition", {}),
-                "tags": current_recipe.get("tags", []),
-                "price_per_serving": current_recipe.get("price_per_serving"),
-            },
-            ensure_ascii=False,
-        )
+        payload = {
+            "title": current_recipe.get("title"),
+            "servings": current_recipe.get("servings"),
+            "cooking_minutes": current_recipe.get("cooking_minutes"),
+            "ingredients": current_recipe.get("ingredients", []),
+            "steps": current_recipe.get("steps", []),
+            "notes": current_recipe.get("notes", ""),
+            "nutrition": current_recipe.get("nutrition", {}),
+            "tags": current_recipe.get("tags", []),
+            "price_per_serving": current_recipe.get("price_per_serving"),
+        }
+        composed_note = ""
+        if "items" in current_recipe:
+            payload = {"title": current_recipe.get("title"), "notes": current_recipe.get("notes", ""), "items": current_recipe.get("items", [])}
+            composed_note = (
+                " Ce plat est un assortiment de plusieurs variantes (champ \"items\") : garde cette "
+                "structure de liste, modifie uniquement la ou les variantes concernées par la demande."
+            )
+        current_json = json.dumps(payload, ensure_ascii=False)
 
         return (
             "Tu es un assistant culinaire. Voici une recette actuelle et une demande de "
@@ -753,12 +759,12 @@ class ATableCoordinator:
             "une protéine), mets à jour ingredients/steps/nutrition/tags en conséquence. Si "
             "c'est un simple conseil de cuisson ou une précision, AJOUTE-la uniquement aux "
             "steps ou notes sans changer le reste. Ne modifie que ce qui est nécessaire pour "
-            "répondre à la demande, garde tout le reste identique à la recette actuelle.\n\n"
+            "répondre à la demande, garde tout le reste identique à la recette actuelle."
+            f"{composed_note}\n\n"
             f"{RECIPE_QUALITY_GUIDELINES}\n\n"
             "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
-            "reprenant exactement la même structure que la recette actuelle ci-dessus (title, "
-            "servings, cooking_minutes, ingredients, steps, notes, nutrition, tags, "
-            "price_per_serving), avec les champs modifiés selon la demande."
+            "reprenant exactement la même structure que la recette actuelle ci-dessus, avec les "
+            "champs modifiés selon la demande."
         )
 
     async def _call_refine_ai(self, prefs: dict[str, Any], task_name: str, instructions: str) -> dict[str, Any]:
@@ -936,6 +942,88 @@ class ATableCoordinator:
             if ing.get("id") != ingredient_id
         ]
         await self.store.async_save()
+
+    async def async_remove_meal_card(self, meal_card_id: str) -> None:
+        """Supprime définitivement une carte repas (backlog ou jour)."""
+        self.store.data["meal_cards"].pop(meal_card_id, None)
+        await self.store.async_save()
+
+    async def async_archive_recipe(self, recipe_id: str) -> dict[str, Any]:
+        """Archive une recette (ne disparaît plus de nulle part, juste masquée de la bibliothèque)."""
+        recipe = self.store.data["recipes"].get(recipe_id)
+        if recipe is None:
+            raise ValueError("Recette introuvable")
+        recipe["is_archived"] = True
+        recipe["updated_at"] = dt_util.now().isoformat()
+        await self.store.async_save()
+        return recipe
+
+    async def async_unarchive_recipe(self, recipe_id: str) -> dict[str, Any]:
+        """Désarchive une recette (annule un archivage)."""
+        recipe = self.store.data["recipes"].get(recipe_id)
+        if recipe is None:
+            raise ValueError("Recette introuvable")
+        recipe["is_archived"] = False
+        recipe["updated_at"] = dt_util.now().isoformat()
+        await self.store.async_save()
+        return recipe
+
+    async def async_remove_history_entry(self, history_id: str) -> None:
+        """Supprime une entrée d'historique."""
+        self.store.data["history"] = [
+            h for h in self.store.data.get("history", []) if h.get("id") != history_id
+        ]
+        await self.store.async_save()
+
+    async def async_restore_history_entry(self, entry: dict[str, Any]) -> None:
+        """Réinsère une entrée d'historique précédemment supprimée (annulation)."""
+        history = self.store.data.setdefault("history", [])
+        if not any(h.get("id") == entry.get("id") for h in history):
+            history.append(entry)
+        await self.store.async_save()
+
+    async def async_fetch_recipe_image(self, recipe_id: str) -> dict[str, Any]:
+        """Cherche une illustration pour une recette via l'API Google Custom Search."""
+        recipe = self.store.data["recipes"].get(recipe_id)
+        if recipe is None:
+            raise ValueError("Recette introuvable")
+
+        prefs = self.store.data.get("preferences", {})
+        api_key = prefs.get("google_search_api_key")
+        engine_id = prefs.get("google_search_engine_id")
+        if not api_key or not engine_id:
+            raise ValueError("Configure ta clé Google Custom Search dans Paramètres → Intégrations.")
+
+        session = async_get_clientsession(self.hass)
+        params = {
+            "key": api_key,
+            "cx": engine_id,
+            "q": recipe.get("title", ""),
+            "searchType": "image",
+            "num": 1,
+            "safe": "active",
+        }
+        try:
+            async with session.get("https://www.googleapis.com/customsearch/v1", params=params) as resp:
+                if resp.status != 200:
+                    raise ValueError(f"Recherche d'image impossible (code {resp.status}).")
+                data = await resp.json()
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Erreur de recherche d'image : {e}")
+            raise ValueError("Recherche d'image impossible. Réessaie.") from e
+
+        items = data.get("items") or []
+        if not items or not items[0].get("link"):
+            raise ValueError("Aucune image trouvée pour ce plat.")
+
+        recipe["image_url"] = items[0]["link"]
+        recipe["image_status"] = "found"
+        recipe["updated_at"] = dt_util.now().isoformat()
+        await self.store.async_save()
+
+        return recipe
 
     async def async_clear_cards_and_history(self) -> None:
         """Vide toutes les cartes, recettes, brouillons et historique, mais garde les préférences."""
@@ -1115,11 +1203,37 @@ class ATableCoordinator:
             lines.append(f"- Occasion / contraintes précisées par l'utilisateur : {notes}")
         return "\n".join(lines)
 
-    async def async_generate_guest_menu(self, guests: int, notes: str = "") -> dict[str, Any]:
-        """Génère un menu invité complet (apéro/entrée/plat/dessert) + accords mets-vins, en un seul appel IA."""
+    def _guest_course_json_skeleton(self, key: str, composed: bool) -> str:
+        if composed:
+            return f'    "{key}": {{"title": "...", "notes": "...", "items": [{{"title": "...", "ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], "steps": ["..."]}}]}}'
+        return f'    "{key}": {{"title": "...", "ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], "steps": ["..."], "notes": "..."}}'
+
+    async def async_generate_guest_menu(
+        self,
+        guests: int,
+        notes: str = "",
+        course_keys: list[str] | None = None,
+        composed_keys: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Génère un menu invité complet + accords mets-vins, en un seul appel IA."""
+        selected = [k for k in (course_keys or list(self.GUEST_COURSE_KEYS)) if k in self.GUEST_COURSE_KEYS]
+        if not selected:
+            raise ValueError("Choisis au moins un service pour le menu.")
+        composed = set(composed_keys or []) & set(selected)
+
         prefs = self.store.data.get("preferences", {})
         temp_ings = self.store.data.get("temporary_ingredients", [])
         context = self._guest_menu_context(prefs, temp_ings, notes)
+
+        course_labels = ", ".join(self.GUEST_COURSE_LABELS[k].lower() for k in selected)
+        composed_note = ""
+        if composed:
+            composed_labels = ", ".join(self.GUEST_COURSE_LABELS[k].lower() for k in composed)
+            composed_note = (
+                f" Pour {composed_labels}, propose un assortiment de 2 à 4 variantes distinctes "
+                "(champ \"items\", une entrée par variante) plutôt qu'un plat unique."
+            )
+        json_skeleton = ",\n".join(self._guest_course_json_skeleton(k, k in composed) for k in selected)
 
         instructions = (
             "Tu es un assistant culinaire qui compose un repas complet pour recevoir des invités. "
@@ -1127,21 +1241,18 @@ class ATableCoordinator:
             "CONTEXTE :\n"
             f"{context}\n\n"
             f"{RECIPE_QUALITY_GUIDELINES}\n\n"
-            "Compose un apéritif, une entrée, un plat et un dessert cohérents entre eux (pas de "
-            "répétition d'ingrédients ou de techniques d'un plat à l'autre), adaptés aux régimes/"
+            f"Compose les services suivants, cohérents entre eux (pas de répétition d'ingrédients "
+            f"ou de techniques d'un plat à l'autre) : {course_labels}. Adapte-toi aux régimes/"
             "allergies du foyer, en utilisant en priorité les aliments déjà disponibles si "
-            "pertinent. Propose aussi 2 à 4 suggestions d'accord mets-vins sous forme de STYLES "
-            "(ex. \"rouge léger et fruité\", \"blanc sec et minéral\", \"blanc moelleux ou "
-            "pétillant\") avec une courte justification liée au menu — jamais un nom de marque "
-            "ou de domaine précis, car cela ne peut pas être vérifié.\n\n"
+            f"pertinent.{composed_note} Propose aussi 2 à 4 suggestions d'accord mets-vins sous "
+            "forme de STYLES (ex. \"rouge léger et fruité\", \"blanc sec et minéral\", \"blanc "
+            "moelleux ou pétillant\") avec une courte justification liée au menu — jamais un nom "
+            "de marque ou de domaine précis, car cela ne peut pas être vérifié.\n\n"
             "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
             "exactement au format :\n"
             "{\n"
             '  "courses": {\n'
-            '    "aperitif": {"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], "steps": ["..."], "notes": "..."},\n'
-            '    "entree": {"title": "...", "ingredients": [...], "steps": ["..."], "notes": "..."},\n'
-            '    "plat": {"title": "...", "ingredients": [...], "steps": ["..."], "notes": "..."},\n'
-            '    "dessert": {"title": "...", "ingredients": [...], "steps": ["..."], "notes": "..."}\n'
+            f"{json_skeleton}\n"
             "  },\n"
             '  "wine_pairings": [{"style": "...", "description": "..."}]\n'
             "}"
@@ -1168,7 +1279,7 @@ class ATableCoordinator:
         try:
             parsed = json.loads(response_text)
             courses = parsed.get("courses")
-            if not isinstance(courses, dict) or not all(k in courses for k in self.GUEST_COURSE_KEYS):
+            if not isinstance(courses, dict) or not all(k in courses for k in selected):
                 raise ValueError("Réponse IA invalide")
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (menu invité) : {e}")
@@ -1181,7 +1292,9 @@ class ATableCoordinator:
             "created_at": now,
             "guests": guests,
             "notes": notes,
-            "courses": {key: courses.get(key, {}) for key in self.GUEST_COURSE_KEYS},
+            "course_keys": selected,
+            "composed_keys": list(composed),
+            "courses": {key: courses.get(key, {}) for key in selected},
             "wine_pairings": [p for p in (parsed.get("wine_pairings") or []) if isinstance(p, dict)],
         }
 
@@ -1199,8 +1312,10 @@ class ATableCoordinator:
     async def async_regenerate_guest_course(self, menu_id: str, course_key: str) -> dict[str, Any]:
         """Régénère un seul plat d'un menu invité, en gardant les autres plats et les accords vins."""
         menu = self._get_guest_menu(menu_id)
-        if course_key not in self.GUEST_COURSE_KEYS:
+        course_keys = menu.get("course_keys") or list(self.GUEST_COURSE_KEYS)
+        if course_key not in course_keys:
             raise ValueError("Type de plat invalide")
+        is_composed = course_key in (menu.get("composed_keys") or [])
 
         prefs = self.store.data.get("preferences", {})
         temp_ings = self.store.data.get("temporary_ingredients", [])
@@ -1208,9 +1323,21 @@ class ATableCoordinator:
 
         other_courses = [
             f"- {self.GUEST_COURSE_LABELS[k]} : {menu['courses'][k].get('title', '')}"
-            for k in self.GUEST_COURSE_KEYS
+            for k in course_keys
             if k != course_key and menu["courses"].get(k)
         ]
+
+        composed_note = (
+            " Réponds avec un assortiment de 2 à 4 variantes distinctes (champ \"items\") plutôt "
+            "qu'un plat unique."
+            if is_composed
+            else ""
+        )
+        result_skeleton = (
+            self._guest_course_json_skeleton(course_key, True).split(": ", 1)[1]
+            if is_composed
+            else '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], "steps": ["..."], "notes": "..."}'
+        )
 
         instructions = (
             f"Tu composes le {self.GUEST_COURSE_LABELS[course_key].lower()} d'un repas invités pour "
@@ -1218,10 +1345,9 @@ class ATableCoordinator:
             + ("\n".join(other_courses) if other_courses else "aucun autre plat encore choisi")
             + f"\n\nCONTEXTE :\n{context}\n\n{RECIPE_QUALITY_GUIDELINES}\n\n"
             "Propose une idée différente de la précédente pour ce plat, cohérente avec les autres "
-            "plats du menu (pas de répétition d'ingrédients/techniques).\n\n"
+            f"plats du menu (pas de répétition d'ingrédients/techniques).{composed_note}\n\n"
             "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
-            "exactement au format :\n"
-            '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], "steps": ["..."], "notes": "..."}'
+            f"exactement au format :\n{result_skeleton}"
         )
 
         response = await self.hass.services.async_call(

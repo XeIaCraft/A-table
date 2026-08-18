@@ -185,6 +185,8 @@ class ATableCard extends HTMLElement {
     this._touchTimer = null;
     this._ghost = null;
     this._settingsDraft = null;
+    this._timers = new Map();
+    this._timerInterval = null;
   }
 
   set hass(hass) {
@@ -264,6 +266,7 @@ class ATableCard extends HTMLElement {
           ${tags.length ? `<span class="tags">${tags.map((tag) => `<i>${this._esc(tag)}</i>`).join("")}</span>` : ""}
         </button>
         <button class="cook" type="button" data-cook="${this._esc(card.id)}" aria-label="Marquer comme cuisiné" title="Cuisiné">${icon("check")}</button>
+        <button class="meal-delete" type="button" data-delete-card="${this._esc(card.id)}" aria-label="Supprimer cette carte" title="Supprimer">${icon("trash")}</button>
       </div>
     </article>`;
   }
@@ -386,7 +389,7 @@ class ATableCard extends HTMLElement {
       .meal.dragging{opacity:.35}
       .meal-swatch{height:30px;display:flex;align-items:center;justify-content:flex-end;padding:0 8px;background:linear-gradient(120deg,hsl(var(--sw-h) 55% 42%),hsl(calc(var(--sw-h) + 35) 60% 32%));color:rgba(255,255,255,.85)}
       .meal-swatch .icon{width:15px;height:15px}
-      .meal-row{display:grid;grid-template-columns:27px minmax(0,1fr) 31px;align-items:start;gap:7px;padding:9px}
+      .meal-row{display:grid;grid-template-columns:27px minmax(0,1fr) 31px 31px;align-items:start;gap:7px;padding:9px}
       .meal-fav{display:inline-flex;vertical-align:-2px;margin-right:4px;color:#e3b341}
       .meal-fav .icon{width:13px;height:13px}
       .grip{width:27px;height:31px;border:0;background:transparent;color:var(--secondary-text-color,#aeb7c5);line-height:1;touch-action:none;display:grid;place-items:center;cursor:grab}
@@ -398,6 +401,9 @@ class ATableCard extends HTMLElement {
       .tags i{padding:2px 6px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 9%,transparent);color:var(--secondary-text-color,#aeb7c5);font-size:10px;font-style:normal}
       .cook{width:31px;height:31px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:transparent;color:var(--primary-color,#4f98a3);display:grid;place-items:center}
       .cook:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 14%,transparent);border-color:var(--primary-color,#4f98a3)}
+      .meal-delete{width:31px;height:31px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:transparent;color:var(--secondary-text-color,#aeb7c5);display:grid;place-items:center}
+      .meal-delete:hover{background:color-mix(in srgb,#c94c4c 14%,transparent);border-color:#c94c4c;color:#c94c4c}
+      .meal-delete .icon{width:15px;height:15px}
       .skeleton-wrap{display:grid;gap:12px}
       .skeleton{border-radius:var(--at-radius-md);background:linear-gradient(100deg,var(--at-surface-1) 30%,var(--at-surface-2) 50%,var(--at-surface-1) 70%);background-size:200% 100%;animation:at-shimmer 1.4s ease-in-out infinite}
       .skeleton-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
@@ -430,6 +436,7 @@ class ATableCard extends HTMLElement {
       .toast-success .toast-icon{color:#2f9e57}
       .toast-error .toast-icon{color:#c94c4c}
       .toast-info .toast-icon{color:var(--primary-color,#4f98a3)}
+      .toast-undo{margin-left:auto;flex-shrink:0;background:none;border:none;font-weight:600;color:var(--primary-color,#4f98a3);cursor:pointer;padding:2px 4px}
       .state{padding:48px 12px;text-align:center;color:var(--secondary-text-color,#aeb7c5)}
       .state.error{color:var(--error-color,#e57373)}
       .proposal{padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);margin-bottom:10px}
@@ -459,6 +466,17 @@ class ATableCard extends HTMLElement {
       .refine-send{display:inline-flex;align-items:center;gap:6px;align-self:flex-end;background:none;border:1px solid var(--divider-color,rgba(255,255,255,.15));border-radius:8px;padding:6px 12px;color:inherit;cursor:pointer}
       .refine-send .icon{width:15px;height:15px}
       .wine-pairing{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--secondary-background-color,rgba(255,255,255,.04))}
+      .wine-search-link{color:var(--primary-color,#4f98a3);font-size:12px;margin-top:4px;text-decoration:none}
+      .wine-search-link:hover{text-decoration:underline}
+      .recipe-image{margin:10px 0;border-radius:var(--at-radius-sm);overflow:hidden}
+      .recipe-image img{width:100%;max-height:260px;object-fit:cover;display:block}
+      .step-timer-btn{display:block;margin-top:4px;font-size:11px;padding:3px 8px;border-radius:99px;border:1px solid var(--at-border);background:none;color:var(--primary-color,#4f98a3);cursor:pointer}
+      .timers-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+      .timer-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:var(--at-surface-1);font-size:13px}
+      .timer-row.is-done{background:color-mix(in srgb,#2f9e57 18%,transparent)}
+      .timer-name{flex:1;font-weight:600}
+      .timer-remaining{font-variant-numeric:tabular-nums;color:var(--secondary-text-color,#aeb7c5)}
+      .timer-add-row{gap:8px}
       .proposal-title{font-weight:700;font-size:14px}
       .proposal-meta{display:flex;flex-wrap:wrap;gap:8px;color:var(--secondary-text-color,#aeb7c5);font-size:11px}
       .proposal-section{margin-top:8px;font-size:12px}
@@ -494,6 +512,11 @@ class ATableCard extends HTMLElement {
       input[type="range"]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--primary-color,#4f98a3);border:3px solid var(--card-background-color,#171a20);box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
       .dialog input[type="checkbox"],.dialog input[type="radio"]{width:16px;min-height:16px;height:16px;flex-shrink:0;padding:0}
       .toggle-group{display:flex;flex-wrap:wrap;gap:8px}
+      .guest-course-picker{margin-bottom:14px;align-items:center}
+      .toggle-chip-sm{padding:5px 10px;font-size:11px;margin-right:10px}
+      .toggle-chip-sm:has(input:disabled){opacity:.4;cursor:not-allowed}
+      .guest-item{padding:8px 0;border-top:1px solid var(--divider-color,rgba(255,255,255,.08))}
+      .guest-item:first-child{border-top:none}
       .toggle-chip{position:relative;display:inline-flex;align-items:center;padding:8px 15px;border-radius:99px;border:1px solid var(--at-border);background:var(--at-surface-1);font-size:13px;font-weight:600;color:var(--secondary-text-color,#aeb7c5);cursor:pointer;transition:background-color 150ms var(--at-ease),border-color 150ms var(--at-ease),color 150ms var(--at-ease)}
       .toggle-chip input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
       .toggle-chip:hover{border-color:color-mix(in srgb,var(--primary-color,#4f98a3) 45%,var(--at-border))}
@@ -514,10 +537,12 @@ class ATableCard extends HTMLElement {
       .library-item-actions .icon-btn{width:36px;height:36px}
       .history-list{margin-top:var(--at-space-3);max-height:52vh;overflow:auto}
       .history-items{display:grid;gap:6px}
-      .history-item{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--at-radius-sm);background:var(--at-surface-1);font-size:13px}
+      .history-item{display:grid;grid-template-columns:52px 1fr auto auto;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--at-radius-sm);background:var(--at-surface-1);font-size:13px}
       .history-date{color:var(--secondary-text-color,#aeb7c5);font-size:11px;font-weight:700;text-transform:uppercase}
       .history-title{font-weight:600}
       .history-meta{display:flex;align-items:center;gap:6px;color:var(--secondary-text-color,#aeb7c5);font-size:11px}
+      .history-delete{width:28px;height:28px}
+      .history-delete .icon{width:14px;height:14px}
       .history-rating-icon{width:14px;height:14px}
       .rate-title{margin:6px 0 0;font-weight:700;font-size:15px}
       .rate-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:var(--at-space-3)}
@@ -646,6 +671,12 @@ class ATableCard extends HTMLElement {
         this._cook(button.dataset.cook);
       })
     );
+    root.querySelectorAll("[data-delete-card]").forEach((button) =>
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._deleteCard(button.dataset.deleteCard);
+      })
+    );
     root.querySelectorAll("[data-grip]").forEach((grip) => this._bindGrip(grip));
     root.querySelectorAll("[data-zone]").forEach((zone) => this._bindZone(zone));
     root.querySelectorAll("[data-add-temp]").forEach((btn) =>
@@ -760,6 +791,24 @@ class ATableCard extends HTMLElement {
       await this._load();
     } catch (error) {
       this._toast(error?.message || "Déplacement impossible.", "error");
+    }
+  }
+
+  async _deleteCard(id) {
+    const card = this._data?.meal_cards?.[id];
+    if (!card) return;
+    if (!confirm("Supprimer cette carte ?")) return;
+    this._saveScroll();
+    try {
+      await this._ws({ type: "a_table/remove_meal_card", meal_card_id: id });
+      await this._load();
+      this._toast("Carte supprimée.", "success", async () => {
+        await this._ws({ type: "a_table/add_recipe_to_backlog", recipe_id: card.recipe_id, servings: card.servings });
+        await this._load();
+        this._toast("Carte restaurée dans À cuisiner.", "success");
+      });
+    } catch (error) {
+      this._toast(error?.message || "Suppression impossible.", "error");
     }
   }
 
@@ -935,7 +984,121 @@ class ATableCard extends HTMLElement {
   _closeModal() {
     this._modal = null;
     this._settingsDraft = null;
+    this._clearTimers();
     this.shadowRoot.querySelector(".overlay")?.remove();
+  }
+
+  _clearTimers() {
+    if (this._timerInterval) {
+      clearInterval(this._timerInterval);
+      this._timerInterval = null;
+    }
+    this._timers.clear();
+  }
+
+  // ---- Chronos de cuisson --------------------------------------------
+
+  _stepTimerMinutes(step) {
+    const match = String(step || "").match(/(\d+)\s*(h(?:eure)?s?|min(?:ute)?s?)/i);
+    if (!match) return null;
+    const value = Number(match[1]);
+    return /^h/i.test(match[2]) ? value * 60 : value;
+  }
+
+  _addTimer(name, minutes) {
+    if (!minutes || minutes <= 0) return;
+    const id = `timer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    this._timers.set(id, { name: name || "Chrono", remaining: minutes * 60, running: true, done: false });
+    if (!this._timerInterval) {
+      this._timerInterval = setInterval(() => this._tickTimers(), 1000);
+    }
+    this._renderTimersList();
+  }
+
+  _tickTimers() {
+    let changed = false;
+    this._timers.forEach((timer, id) => {
+      if (timer.running && !timer.done) {
+        timer.remaining -= 1;
+        changed = true;
+        if (timer.remaining <= 0) {
+          timer.remaining = 0;
+          timer.running = false;
+          timer.done = true;
+          this._toast(`${timer.name} : chrono terminé !`, "success");
+        }
+      }
+    });
+    if (changed) this._renderTimersList();
+  }
+
+  _formatTimer(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  _timersListHTML() {
+    if (!this._timers.size) return "";
+    return [...this._timers.entries()]
+      .map(
+        ([id, t]) => `<div class="timer-row ${t.done ? "is-done" : ""}">
+          <span class="timer-name">${this._esc(t.name)}</span>
+          <span class="timer-remaining">${this._formatTimer(t.remaining)}</span>
+          <button class="icon-btn" type="button" data-timer-toggle="${id}" aria-label="Pause/Reprendre">${icon(t.running ? "close" : "check")}</button>
+          <button class="icon-btn" type="button" data-timer-remove="${id}" aria-label="Supprimer">${icon("trash")}</button>
+        </div>`
+      )
+      .join("");
+  }
+
+  _renderTimersList() {
+    const list = this.shadowRoot.querySelector("[data-timers-list]");
+    if (list) list.innerHTML = this._timersListHTML();
+    this._bindTimerRowActions();
+  }
+
+  _bindTimerRowActions() {
+    const overlay = this.shadowRoot.querySelector(".overlay");
+    if (!overlay) return;
+    overlay.querySelectorAll("[data-timer-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const timer = this._timers.get(btn.dataset.timerToggle);
+        if (timer && !timer.done) {
+          timer.running = !timer.running;
+          this._renderTimersList();
+        }
+      });
+    });
+    overlay.querySelectorAll("[data-timer-remove]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this._timers.delete(btn.dataset.timerRemove);
+        this._renderTimersList();
+      });
+    });
+  }
+
+  _bindTimers(overlay) {
+    this._bindTimerRowActions();
+    overlay.querySelectorAll("[data-start-step-timer]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const minutes = Number(btn.dataset.startStepTimer);
+        const name = btn.dataset.stepLabel || "Étape";
+        this._addTimer(name, minutes);
+      });
+    });
+    overlay.querySelector("[data-add-timer]")?.addEventListener("click", () => {
+      const nameInput = overlay.querySelector("[data-timer-name]");
+      const minutesInput = overlay.querySelector("[data-timer-minutes]");
+      const minutes = Number(minutesInput?.value);
+      if (!minutes || minutes <= 0) {
+        this._toast("Indique une durée valide.", "error");
+        return;
+      }
+      this._addTimer(nameInput?.value.trim() || "Chrono", minutes);
+      if (nameInput) nameInput.value = "";
+      if (minutesInput) minutesInput.value = "";
+    });
   }
 
   _mountModal() {
@@ -956,20 +1119,33 @@ class ATableCard extends HTMLElement {
         ? `<ul>${this._scaledIngredients(recipe, card.servings).map((item) => `<li>${this._esc(item.quantity != null ? Math.round(item.quantity * 100) / 100 : "")} ${this._esc(item.unit || "")} ${this._esc(item.name || "")}</li>`).join("")}</ul>`
         : "Aucun ingrédient détaillé pour le moment.";
       const steps = recipe.steps?.length
-        ? `<ol>${recipe.steps.map((s) => `<li>${this._esc(s)}</li>`).join("")}</ol>`
+        ? `<ol>${recipe.steps
+            .map((s) => {
+              const minutes = this._stepTimerMinutes(s);
+              const timerBtn = minutes
+                ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc(s.slice(0, 30))}">⏱ Lancer (${minutes} min)</button>`
+                : "";
+              return `<li>${this._esc(s)}${timerBtn}</li>`;
+            })
+            .join("")}</ol>`
         : "Aucune étape détaillée pour le moment.";
       const nutrition = recipe.nutrition || {};
       const price = recipe.price_per_serving != null
         ? `<div><strong>Prix par portion</strong><br>${this._esc(recipe.price_per_serving)} €</div>`
         : "";
+      const imageBlock = recipe.image_status === "found" && recipe.image_url
+        ? `<div class="recipe-image"><img src="${this._esc(recipe.image_url)}" alt="${this._esc(recipe.title)}" loading="lazy"></div>`
+        : "";
       overlay.innerHTML = `<section class="dialog">
         <header class="dialog-top">
           <h2>${this._esc(recipe.title)}</h2>
           <div class="dialog-top-actions">
+            <button class="icon-btn" type="button" data-fetch-image="${this._esc(card.recipe_id)}" aria-label="Illustrer" title="Chercher une image">${icon("eye")}</button>
             <button class="icon-btn fav-btn ${recipe.is_favorite ? "is-active" : ""}" type="button" data-toggle-favorite="${this._esc(card.recipe_id)}" aria-label="Basculer favori" title="Favori">${icon("star", recipe.is_favorite ? "is-active" : "")}</button>
             <button class="close" type="button">${icon("close")}</button>
           </div>
         </header>
+        ${imageBlock}
         <div class="facts">
           <div><strong>Temps total</strong><br>${this._esc(recipe.cooking_minutes ?? "À préciser")} min</div>
           <div><strong>Portions</strong><br>${this._esc(card.servings || recipe.servings || 2)}</div>
@@ -986,6 +1162,15 @@ class ATableCard extends HTMLElement {
             </div>
           </div>
           ${price}
+        </div>
+        <div class="refine-section">
+          <h3>Chronos</h3>
+          <div class="timers-list" data-timers-list>${this._timersListHTML()}</div>
+          <div class="row timer-add-row">
+            <input type="text" placeholder="Nom (facultatif)" data-timer-name>
+            <input type="number" min="1" placeholder="Min." data-timer-minutes style="max-width:80px">
+            <button class="cancel" type="button" data-add-timer>+ Chrono</button>
+          </div>
         </div>
         <div class="refine-section">
           <h3>Discuter avec l'IA</h3>
@@ -1247,6 +1432,20 @@ class ATableCard extends HTMLElement {
       overlay.querySelector("[data-toggle-favorite]")?.addEventListener("click", (event) => {
         this._toggleFavorite(event.currentTarget.dataset.toggleFavorite);
       });
+      overlay.querySelector("[data-fetch-image]")?.addEventListener("click", async (event) => {
+        const btn = event.currentTarget;
+        const recipeId = btn.dataset.fetchImage;
+        btn.disabled = true;
+        try {
+          const recipe = await this._ws({ type: "a_table/fetch_recipe_image", recipe_id: recipeId });
+          this._data.recipes[recipeId] = recipe;
+          this._mountModal();
+        } catch (error) {
+          this._toast(error?.message || "Recherche d'image impossible.", "error");
+          btn.disabled = false;
+        }
+      });
+      this._bindTimers(overlay);
     } else if (this._modal.type === "validate") {
       overlay.querySelectorAll("[data-close-draft]").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -1377,7 +1576,7 @@ class ATableCard extends HTMLElement {
           if (hasFile) {
             if (label) label.textContent = "Envoi de la photo…";
             const uploadData = new FormData();
-            uploadData.append("media_content_id", "media-source://media_source/local/");
+            uploadData.append("media_content_id", "media-source://media_source/local");
             uploadData.append("file", file);
             const resp = await this._hass.fetchWithAuth("/api/media_source/local_source/upload", {
               method: "POST",
@@ -1566,6 +1765,7 @@ class ATableCard extends HTMLElement {
           <div class="library-item-actions">
             <button class="icon-btn" type="button" data-library-detail="${this._esc(r.id)}" aria-label="Détails" title="Détails">${icon("eye")}</button>
             <button class="icon-btn" type="button" data-library-add="${this._esc(r.id)}" aria-label="Ajouter au backlog" title="Ajouter à À cuisiner">${icon("plus")}</button>
+            <button class="icon-btn" type="button" data-library-archive="${this._esc(r.id)}" aria-label="Supprimer de mes recettes" title="Supprimer">${icon("trash")}</button>
           </div>
         </article>`;
       })
@@ -1593,6 +1793,25 @@ class ATableCard extends HTMLElement {
       });
       overlay.querySelectorAll("[data-library-add]").forEach((btn) => {
         btn.addEventListener("click", () => this._addRecipeToBacklog(btn.dataset.libraryAdd));
+      });
+      overlay.querySelectorAll("[data-library-archive]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const recipeId = btn.dataset.libraryArchive;
+          if (!confirm("Supprimer cette recette de « Mes recettes » ?")) return;
+          try {
+            await this._ws({ type: "a_table/archive_recipe", recipe_id: recipeId });
+            await this._load();
+            refreshResults();
+            this._toast("Recette supprimée.", "success", async () => {
+              await this._ws({ type: "a_table/unarchive_recipe", recipe_id: recipeId });
+              await this._load();
+              refreshResults();
+              this._toast("Recette restaurée.", "success");
+            });
+          } catch (error) {
+            this._toast(error?.message || "Suppression impossible.", "error");
+          }
+        });
       });
     };
 
@@ -1658,6 +1877,7 @@ class ATableCard extends HTMLElement {
           <span class="history-date">${date}</span>
           <span class="history-title">${this._esc(recipe.title || "Recette inconnue")}</span>
           <span class="history-meta">${this._esc(h.servings || recipe.servings || 2)} pers. ${ratingIcon}</span>
+          <button class="icon-btn history-delete" type="button" data-history-delete="${this._esc(h.id)}" aria-label="Supprimer cette entrée" title="Supprimer">${icon("trash")}</button>
         </div>`;
       })
       .join("")}</div>`;
@@ -1667,11 +1887,37 @@ class ATableCard extends HTMLElement {
     const range = overlay.querySelector("[data-history-range]");
     const display = overlay.querySelector("[data-history-range-display]");
     const list = overlay.querySelector("[data-history-list]");
+    const bindDeletes = () => {
+      overlay.querySelectorAll("[data-history-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const entryId = btn.dataset.historyDelete;
+          const entry = (this._data?.history || []).find((h) => h.id === entryId);
+          if (!entry) return;
+          try {
+            await this._ws({ type: "a_table/remove_history_entry", history_id: entryId });
+            await this._load();
+            if (list) list.innerHTML = this._historyListHTML(this._historyEntries(this._modal.days ?? 20));
+            bindDeletes();
+            this._toast("Entrée supprimée.", "success", async () => {
+              await this._ws({ type: "a_table/restore_history_entry", entry });
+              await this._load();
+              if (list) list.innerHTML = this._historyListHTML(this._historyEntries(this._modal.days ?? 20));
+              bindDeletes();
+              this._toast("Entrée restaurée.", "success");
+            });
+          } catch (error) {
+            this._toast(error?.message || "Suppression impossible.", "error");
+          }
+        });
+      });
+    };
+    bindDeletes();
     range?.addEventListener("input", () => {
       const days = Number(range.value);
       this._modal.days = days;
       if (display) display.textContent = `${days} derniers jours`;
       if (list) list.innerHTML = this._historyListHTML(this._historyEntries(days));
+      bindDeletes();
     });
   }
 
@@ -1850,22 +2096,42 @@ class ATableCard extends HTMLElement {
 
   _guestCourseCardHTML(key, label, course) {
     if (!course || !course.title) return "";
-    const ingredients = (course.ingredients || [])
-      .map((ing) => `${ing.quantity || ""} ${ing.unit || ""} ${ing.name || ""}`)
-      .join(", ");
-    const steps = course.steps?.length
-      ? `<ol>${course.steps.map((s) => `<li>${this._esc(s)}</li>`).join("")}</ol>`
-      : "";
+    let body;
+    if (Array.isArray(course.items)) {
+      body = course.items
+        .map((item) => {
+          const ingredients = (item.ingredients || [])
+            .map((ing) => `${ing.quantity || ""} ${ing.unit || ""} ${ing.name || ""}`)
+            .join(", ");
+          const steps = item.steps?.length
+            ? `<ol>${item.steps.map((s) => `<li>${this._esc(s)}</li>`).join("")}</ol>`
+            : "";
+          return `<div class="guest-item">
+            <strong>${this._esc(item.title || "")}</strong>
+            <span>${this._esc(ingredients || "Aucun ingrédient")}</span>
+            ${steps}
+          </div>`;
+        })
+        .join("");
+    } else {
+      const ingredients = (course.ingredients || [])
+        .map((ing) => `${ing.quantity || ""} ${ing.unit || ""} ${ing.name || ""}`)
+        .join(", ");
+      const steps = course.steps?.length
+        ? `<ol>${course.steps.map((s) => `<li>${this._esc(s)}</li>`).join("")}</ol>`
+        : "";
+      body = `<div class="proposal-section">
+        <strong>Ingrédients</strong>
+        <span>${this._esc(ingredients || "Aucun")}</span>
+      </div>
+      ${steps ? `<div class="proposal-section"><strong>Étapes</strong>${steps}</div>` : ""}`;
+    }
     return `<div class="proposal" data-guest-course="${key}">
       <div class="proposal-head">
         <strong class="proposal-title">${label} — ${this._esc(course.title)}</strong>
         <button class="icon-btn proposal-replace" type="button" data-regenerate-course="${key}" aria-label="Remplacer ce plat" title="Remplacer ce plat">${icon("refresh")}</button>
       </div>
-      <div class="proposal-section">
-        <strong>Ingrédients</strong>
-        <span>${this._esc(ingredients || "Aucun")}</span>
-      </div>
-      ${steps ? `<div class="proposal-section"><strong>Étapes</strong>${steps}</div>` : ""}
+      ${body}
       ${course.notes ? `<div class="proposal-section"><strong>Notes</strong><span>${this._esc(course.notes)}</span></div>` : ""}
       <details class="refine-details">
         <summary>Ajuster avec l'IA</summary>
@@ -1879,12 +2145,26 @@ class ATableCard extends HTMLElement {
     const menu = this._modal.menu_id ? this._data?.guest_menus?.[this._modal.menu_id] : menus[menus.length - 1];
 
     if (!menu) {
+      const selected = this._modal.courseKeys || ATABLE_GUEST_COURSES.map(([key]) => key);
+      const composed = this._modal.composedKeys || [];
+      const courseChoices = ATABLE_GUEST_COURSES.map(
+        ([key, label]) => `
+        <label class="toggle-chip">
+          <input type="checkbox" name="course_keys" value="${key}" data-guest-course-toggle ${selected.includes(key) ? "checked" : ""}>
+          <span>${label}</span>
+        </label>
+        <label class="toggle-chip toggle-chip-sm">
+          <input type="checkbox" name="composed_keys" value="${key}" ${composed.includes(key) ? "checked" : ""} ${selected.includes(key) ? "" : "disabled"}>
+          <span>Assortiment</span>
+        </label>`
+      ).join("");
       return `<section class="dialog">
         <header class="dialog-top">
           <h2>Repas invités</h2>
           <button class="close" type="button">${icon("close")}</button>
         </header>
-        <p class="taste-hint">Compose un repas complet (apéritif, entrée, plat, dessert) avec des suggestions d'accord mets-vins, via l'IA.</p>
+        <p class="taste-hint">Compose un repas complet avec des suggestions d'accord mets-vins, via l'IA. Choisis les services souhaités ; coche "Assortiment" pour un service qui propose plusieurs variantes (ex. plusieurs sortes de sushis).</p>
+        <div class="toggle-group guest-course-picker">${courseChoices}</div>
         <label>Nombre d'invités
           <input name="guests" type="number" min="1" max="30" value="${this._modal.guests || 6}">
         </label>
@@ -1899,9 +2179,21 @@ class ATableCard extends HTMLElement {
     }
 
     this._modal.menu_id = menu.id;
-    const courseCards = ATABLE_GUEST_COURSES.map(([key, label]) => this._guestCourseCardHTML(key, label, menu.courses?.[key])).join("");
+    const menuCourseKeys = menu.course_keys || ATABLE_GUEST_COURSES.map(([key]) => key);
+    const courseCards = ATABLE_GUEST_COURSES.filter(([key]) => menuCourseKeys.includes(key))
+      .map(([key, label]) => this._guestCourseCardHTML(key, label, menu.courses?.[key]))
+      .join("");
+    const groceryStore = this._data?.preferences?.grocery_store || "";
     const wineCards = (menu.wine_pairings || [])
-      .map((p) => `<div class="wine-pairing"><strong>${this._esc(p.style || "")}</strong><span>${this._esc(p.description || "")}</span></div>`)
+      .map((p) => {
+        const query = encodeURIComponent(`${p.style || ""} ${groceryStore}`.trim());
+        const searchLabel = groceryStore ? `Chercher chez ${this._esc(groceryStore)}` : "Chercher";
+        return `<div class="wine-pairing">
+          <strong>${this._esc(p.style || "")}</strong>
+          <span>${this._esc(p.description || "")}</span>
+          <a href="https://www.google.com/search?q=${query}" target="_blank" rel="noopener" class="wine-search-link">${searchLabel} ↗</a>
+        </div>`;
+      })
       .join("");
 
     return `<section class="dialog">
@@ -1926,15 +2218,32 @@ class ATableCard extends HTMLElement {
 
   _bindGuestModal(overlay) {
     overlay.querySelector("[data-close-guest]")?.addEventListener("click", () => this._closeModal());
+    overlay.querySelectorAll('[name="course_keys"]').forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const composedCb = overlay.querySelector(`[name="composed_keys"][value="${cb.value}"]`);
+        if (composedCb) {
+          composedCb.disabled = !cb.checked;
+          if (!cb.checked) composedCb.checked = false;
+        }
+      });
+    });
     overlay.querySelector("[data-generate-guest]")?.addEventListener("click", async (event) => {
       const btn = event.currentTarget;
       const guests = Number(overlay.querySelector('[name="guests"]')?.value || 6);
       const notes = overlay.querySelector('[name="notes"]')?.value.trim() || "";
+      const course_keys = [...overlay.querySelectorAll('[name="course_keys"]:checked')].map((cb) => cb.value);
+      const composed_keys = [...overlay.querySelectorAll('[name="composed_keys"]:checked')].map((cb) => cb.value);
+      if (!course_keys.length) {
+        this._toast("Choisis au moins un service.", "error");
+        return;
+      }
+      this._modal.courseKeys = course_keys;
+      this._modal.composedKeys = composed_keys;
       const label = overlay.querySelector("[data-generate-guest-label]");
       btn.disabled = true;
       if (label) label.textContent = "Génération en cours…";
       try {
-        const menu = await this._ws({ type: "a_table/generate_guest_menu", guests, notes });
+        const menu = await this._ws({ type: "a_table/generate_guest_menu", guests, notes, course_keys, composed_keys });
         this._data.guest_menus = this._data.guest_menus || {};
         this._data.guest_menus[menu.id] = menu;
         this._modal.menu_id = menu.id;
@@ -2239,6 +2548,18 @@ class ATableCard extends HTMLElement {
               ${this._entityOptionsHTML("todo.", prefs.todo_entity_id)}
             </select>
           </label>
+        </div>
+        <div class="settings-section">
+          <h3>Illustrations de plats (facultatif)</h3>
+          <p class="taste-hint">Recherche d'image via l'API Google Custom Search — voir le README pour la procédure de création de la clé et du moteur de recherche.</p>
+          <div class="row">
+            <label>Clé API Google Custom Search
+              <input name="google_search_api_key" value="${this._esc(prefs.google_search_api_key || "")}" type="password" autocomplete="off">
+            </label>
+            <label>ID du moteur de recherche (cx)
+              <input name="google_search_engine_id" value="${this._esc(prefs.google_search_engine_id || "")}" autocomplete="off">
+            </label>
+          </div>
         </div>
       </div>
 
@@ -2600,6 +2921,8 @@ class ATableCard extends HTMLElement {
       objectives,
       ai_task_entity_id: String(data.get("ai_task_entity_id") || "") || prefs.ai_task_entity_id,
       todo_entity_id: String(data.get("todo_entity_id") || "") || null,
+      google_search_api_key: String(data.get("google_search_api_key") || "") || null,
+      google_search_engine_id: String(data.get("google_search_engine_id") || "") || null,
       budget_per_serving: data.get("budget_per_serving") ? Number(data.get("budget_per_serving")) : null,
       target_kcal_per_serving: data.get("target_kcal_per_serving") ? Number(data.get("target_kcal_per_serving")) : null,
       grocery_store: String(data.get("grocery_store") || ""),
@@ -2630,7 +2953,7 @@ class ATableCard extends HTMLElement {
     return { preferences, rules };
   }
 
-  _toast(message, kind = "info") {
+  _toast(message, kind = "info", undo) {
     this.shadowRoot.querySelector(".toast")?.remove();
     const toast = document.createElement("div");
     toast.className = `toast toast-${kind}`;
@@ -2640,8 +2963,23 @@ class ATableCard extends HTMLElement {
     const text = document.createElement("span");
     text.textContent = message;
     toast.append(iconWrap, text);
+    if (undo) {
+      const undoBtn = document.createElement("button");
+      undoBtn.type = "button";
+      undoBtn.className = "toast-undo";
+      undoBtn.textContent = "Annuler";
+      undoBtn.addEventListener("click", async () => {
+        toast.remove();
+        try {
+          await undo();
+        } catch (error) {
+          this._toast(error?.message || "Impossible d'annuler.", "error");
+        }
+      });
+      toast.append(undoBtn);
+    }
     this.shadowRoot.append(toast);
-    setTimeout(() => toast.remove(), 3600);
+    setTimeout(() => toast.remove(), undo ? 6000 : 3600);
   }
 }
 

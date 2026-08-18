@@ -39,6 +39,8 @@ DEFAULT_DATA: dict[str, Any] = {
         "objectives": [],  # max 3
         "budget_per_serving": None,
         "target_kcal_per_serving": None,
+        "google_search_api_key": None,
+        "google_search_engine_id": None,
         "grocery_store": "",  # where user shops
         "time_profile": "normal",  # quick (<=20), normal (<=60), chill (>60)
         "complexity": "free",  # simple, medium, free

@@ -1,9 +1,10 @@
 {
   "domain": "a_table",
   "name": "À table",
-  "codeowners": [],
+  "codeowners": ["@XeIaCraft"],
   "config_flow": true,
-  "documentation": "https://example.invalid/a-table",
+  "documentation": "https://github.com/XeIaCraft/A-table",
+  "issue_tracker": "https://github.com/XeIaCraft/A-table/issues",
   "integration_type": "service",
   "iot_class": "local_push",
   "version": "1.0.0",
