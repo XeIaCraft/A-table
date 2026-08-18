@@ -19,6 +19,7 @@ DEFAULT_DATA: dict[str, Any] = {
     "history": [],
     "drafts": {},
     "temporary_ingredients": [],
+    "shopping_list_checked": {},
     "preferences": {
         "default_servings": 2,
         "default_recipe_count": 6,
@@ -108,6 +109,8 @@ class ATableStore:
         self.data.setdefault("recipes", {})
         self.data.setdefault("meal_cards", {})
         self.data.setdefault("history", [])
+        if not isinstance(self.data.get("shopping_list_checked"), dict):
+            self.data["shopping_list_checked"] = {}
 
         prefs = self.data["preferences"]
         for list_key in ("liked_ingredients", "disliked_ingredients", "objectives", "diets", "allergies", "available_equipment"):

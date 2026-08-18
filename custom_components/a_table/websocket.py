@@ -31,6 +31,9 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_toggle_favorite)
     websocket_api.async_register_command(hass, websocket_rate_recipe)
     websocket_api.async_register_command(hass, websocket_add_recipe_to_backlog)
+    websocket_api.async_register_command(hass, websocket_toggle_shopping_item)
+    websocket_api.async_register_command(hass, websocket_clear_shopping_checked)
+    websocket_api.async_register_command(hass, websocket_analyze_tastes)
 
 
 @callback
@@ -449,3 +452,61 @@ async def websocket_add_recipe_to_backlog(
         return
 
     connection.send_result(msg["id"], card)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/toggle_shopping_item",
+        vol.Required("key"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_toggle_shopping_item(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Bascule l'état coché d'un article de la liste de courses."""
+    coordinator = _get_coordinator(hass)
+    checked = await coordinator.async_toggle_shopping_item(msg["key"])
+    connection.send_result(msg["id"], checked)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/clear_shopping_checked",
+    }
+)
+@websocket_api.async_response
+async def websocket_clear_shopping_checked(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Vide l'état coché de la liste de courses."""
+    coordinator = _get_coordinator(hass)
+    await coordinator.async_clear_shopping_checked()
+    connection.send_result(msg["id"], coordinator.get_data())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/analyze_tastes",
+    }
+)
+@websocket_api.async_response
+async def websocket_analyze_tastes(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Analyse l'historique récent via l'IA pour suggérer des goûts."""
+    coordinator = _get_coordinator(hass)
+
+    try:
+        result = await coordinator.async_analyze_tastes()
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+
+    connection.send_result(msg["id"], result)

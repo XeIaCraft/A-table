@@ -229,6 +229,85 @@ class ATableCoordinator:
 
         return {"draft_id": draft_id}
 
+    async def async_analyze_tastes(self) -> dict[str, Any]:
+        """Analyse l'historique récent via l'IA pour suggérer des goûts, sans rien enregistrer."""
+        prefs = self.store.data.get("preferences", {})
+        recipes = self.store.data.get("recipes", {})
+        history = self.store.data.get("history", [])
+
+        history_days = prefs.get("history_days_for_generation", 20)
+        cutoff = (dt_util.now() - timedelta(days=history_days)).isoformat()
+        recent_history = [h for h in history if h.get("cooked_at", "") >= cutoff]
+
+        if not recent_history:
+            return {"liked_suggestions": [], "disliked_suggestions": []}
+
+        lines = []
+        for h in recent_history[-30:]:
+            recipe = recipes.get(h.get("recipe_id", ""), {})
+            title = recipe.get("title", "")
+            if not title:
+                continue
+            entry = f"- {title}"
+            for rating in recipe.get("ratings", [])[-1:]:
+                entry += " (aimé)" if rating.get("liked") else " (pas aimé)"
+                if rating.get("comment"):
+                    entry += f" : {rating['comment']}"
+            lines.append(entry)
+
+        if not lines:
+            return {"liked_suggestions": [], "disliked_suggestions": []}
+
+        liked_existing = set(x.lower() for x in prefs.get("liked_ingredients", []))
+        disliked_existing = set(x.lower() for x in prefs.get("disliked_ingredients", []))
+
+        instructions = (
+            "Tu analyses les habitudes culinaires récentes d'un foyer à partir de la liste de repas "
+            "cuisinés ci-dessous (avec avis 👍/👎 et commentaires quand disponibles).\n\n"
+            "REPAS RÉCENTS :\n" + "\n".join(lines) + "\n\n"
+            "Déduis des tendances de goûts explicites (ingrédients, styles de cuisine, méthodes de "
+            "cuisson) — pas des titres de plats complets, des éléments réutilisables comme "
+            "\"gingembre\", \"cuisine méditerranéenne\", \"plats mijotés\".\n\n"
+            "Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, au format :\n"
+            "{\n"
+            '  "liked_suggestions": ["ingrédient ou style apprécié", "..."],\n'
+            '  "disliked_suggestions": ["ingrédient ou style à éviter", "..."]\n'
+            "}\n\n"
+            "Maximum 5 éléments par liste. Si aucune tendance claire ne se dégage, renvoie des listes vides."
+        )
+
+        response = await self.hass.services.async_call(
+            "ai_task",
+            "generate_data",
+            {
+                "task_name": "Analyse des habitudes culinaires",
+                "entity_id": "ai_task.google_ai_task",
+                "instructions": instructions,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        response_text = response.get("data") or response.get("response") or response.get("result") or ""
+
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
+        if json_match:
+            response_text = json_match.group(0)
+
+        try:
+            parsed = json.loads(response_text)
+            liked_suggestions = [s for s in parsed.get("liked_suggestions", []) if isinstance(s, str)]
+            disliked_suggestions = [s for s in parsed.get("disliked_suggestions", []) if isinstance(s, str)]
+        except Exception as e:
+            logger.error(f"Erreur de parsing JSON (analyse des goûts) : {e}")
+            liked_suggestions = []
+            disliked_suggestions = []
+
+        liked_suggestions = [s for s in liked_suggestions if s.lower() not in liked_existing][:5]
+        disliked_suggestions = [s for s in disliked_suggestions if s.lower() not in disliked_existing][:5]
+
+        return {"liked_suggestions": liked_suggestions, "disliked_suggestions": disliked_suggestions}
+
     def _build_prompt_context(
         self,
         count: int,
@@ -603,4 +682,16 @@ class ATableCoordinator:
         self.store.data["meal_cards"] = {}
         self.store.data["history"] = []
         self.store.data["drafts"] = {}
+        await self.store.async_save()
+
+    async def async_toggle_shopping_item(self, key: str) -> dict[str, Any]:
+        """Bascule l'état coché d'un article de la liste de courses."""
+        checked = self.store.data.setdefault("shopping_list_checked", {})
+        checked[key] = not checked.get(key, False)
+        await self.store.async_save()
+        return checked
+
+    async def async_clear_shopping_checked(self) -> None:
+        """Vide l'état coché de la liste de courses (nouvelle semaine de courses)."""
+        self.store.data["shopping_list_checked"] = {}
         await self.store.async_save()
