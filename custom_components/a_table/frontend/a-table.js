@@ -927,7 +927,7 @@ class ATableCard extends HTMLElement {
     root.querySelectorAll("[data-count]").forEach((button) =>
       button.addEventListener("click", () => {
         const current = Number(this._data.preferences?.default_recipe_count || 6);
-        this._data.preferences.default_recipe_count = Math.max(1, Math.min(7, current + (button.dataset.count === "plus" ? 1 : -1)));
+        this._data.preferences.default_recipe_count = Math.max(1, Math.min(8, current + (button.dataset.count === "plus" ? 1 : -1)));
         this._render();
       })
     );

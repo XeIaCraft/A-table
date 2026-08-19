@@ -242,7 +242,7 @@ class ATableCoordinator:
         await self.store.async_save()
         return history_item
 
-    _DRAFT_BATCH_SIZE = 3
+    _DRAFT_BATCH_SIZE = 4
 
     def _build_draft_instructions(
         self, context: str, batch_count: int, already_titles: list[str] | None = None
@@ -345,7 +345,7 @@ class ATableCoordinator:
         recipes = self.store.data.get("recipes", {})
         history = self.store.data.get("history", [])
 
-        count = min(count, 7)  # max 7
+        count = min(count, 8)  # max 8
 
         context = self._build_prompt_context(count, prefs, rules, temp_ings, recipes, history)
 
