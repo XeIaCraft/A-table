@@ -565,7 +565,9 @@ class ATableCard extends HTMLElement {
       .selection-bar .icon-btn{width:32px;height:32px}
       .meal.enter,.hero.enter{animation:at-enter 160ms var(--at-ease)}
       @keyframes at-enter{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
-      @media (prefers-reduced-motion: reduce){.meal.enter,.hero.enter{animation:none}}
+      .meal.exit{animation:at-exit 160ms var(--at-ease)}
+      @keyframes at-exit{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.96)}}
+      @media (prefers-reduced-motion: reduce){.meal.enter,.hero.enter,.meal.exit{animation:none}}
       .drop-indicator{position:absolute;height:3px;border-radius:99px;background:var(--primary-color,#4f98a3);box-shadow:0 0 8px color-mix(in srgb,var(--primary-color,#4f98a3) 70%,transparent);pointer-events:none;z-index:10000}
       .day:hover{box-shadow:0 4px 18px rgba(0,0,0,.12)}
       .meal-swatch{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:flex-end;padding:8px;background:linear-gradient(150deg,var(--sw-from,#93764f),var(--sw-to,#5b452c));color:rgba(255,255,255,.85);border:0;width:100%;font:inherit;cursor:pointer}
@@ -815,6 +817,9 @@ class ATableCard extends HTMLElement {
       .shopping-item-qty{font-size:12px;color:var(--secondary-text-color,#aeb7c5)}
       .shopping-item.is-checked{opacity:.45}
       .shopping-item.is-checked .shopping-item-name{text-decoration:line-through}
+      .shopping-stocked{margin-top:14px}
+      .shopping-stocked summary{cursor:pointer;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--secondary-text-color,#aeb7c5)}
+      .shopping-stocked .shopping-items{margin-top:8px}
       .taste-hint{margin:6px 0 10px;font-size:12px;color:var(--secondary-text-color,#aeb7c5);line-height:1.4}
       [data-analyze-tastes]{display:inline-flex;align-items:center;gap:6px}
       [data-analyze-tastes] .icon{width:14px;height:14px}
@@ -1118,11 +1123,32 @@ class ATableCard extends HTMLElement {
     }
   }
 
+  async _animateCardExit(id) {
+    const el = this.shadowRoot.querySelector(`.meal[data-card-id="${CSS.escape(id)}"]`);
+    if (!el) return;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) return;
+    el.classList.add("exit");
+    await new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        el.removeEventListener("animationend", finish);
+        clearTimeout(timer);
+        resolve();
+      };
+      el.addEventListener("animationend", finish, { once: true });
+      const timer = setTimeout(finish, 220);
+    });
+  }
+
   async _deleteCard(id) {
     const card = this._data?.meal_cards?.[id];
     if (!card) return;
     if (!confirm("Supprimer cette carte ?")) return;
     this._saveScroll();
+    await this._animateCardExit(id);
     try {
       await this._ws({ type: "a_table/remove_meal_card", meal_card_id: id });
       await this._load();
@@ -1169,13 +1195,30 @@ class ATableCard extends HTMLElement {
     const count = Number(this._data.preferences?.default_recipe_count || 6);
     const label = btn?.querySelector("[data-generate-label]");
     if (btn) btn.disabled = true;
-    if (label) label.textContent = "Génération en cours…";
+    // 4 must match coordinator.py's _DRAFT_BATCH_SIZE constant server-side.
+    const totalBatches = Math.ceil(count / 4);
+    let progressInterval = null;
+    if (label) {
+      if (totalBatches > 1) {
+        let batch = 1;
+        label.textContent = `Génération en cours… (lot ${batch}/${totalBatches})`;
+        progressInterval = setInterval(() => {
+          if (batch >= totalBatches) return;
+          batch += 1;
+          label.textContent = `Génération en cours… (lot ${batch}/${totalBatches})`;
+        }, 4500);
+      } else {
+        label.textContent = "Génération en cours…";
+      }
+    }
     try {
       const result = await this._ws({ type: "a_table/generate_draft", count });
+      if (progressInterval) clearInterval(progressInterval);
       await this._load();
       this._modal = { type: "validate", draft_id: result.draft_id };
       this._mountModal();
     } catch (error) {
+      if (progressInterval) clearInterval(progressInterval);
       this._toast(error?.message || "Génération impossible.", "error");
       if (btn) btn.disabled = false;
       if (label) label.textContent = "Générer";
@@ -2667,35 +2710,51 @@ class ATableCard extends HTMLElement {
     return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  _shoppingItemHTML(item, isChecked) {
+    const qty = item.uncertain || item.quantity == null ? "quantité à ajuster" : `${item.quantity} ${item.unit}`.trim();
+    return `<label class="shopping-item ${isChecked ? "is-checked" : ""}">
+      <input type="checkbox" data-shopping-toggle="${this._esc(item.key)}" ${isChecked ? "checked" : ""}>
+      <span class="shopping-item-name">${this._esc(item.name)}</span>
+      <span class="shopping-item-qty">${this._esc(qty)}</span>
+    </label>`;
+  }
+
   _shoppingModalHTML() {
     const items = this._shoppingItems();
     const checked = this._data?.shopping_list_checked || {};
+    const activeItems = items.filter((item) => !checked[item.key]);
+    const stockedItems = items.filter((item) => checked[item.key]);
     const byCategory = new Map();
-    items.forEach((item) => {
+    activeItems.forEach((item) => {
       if (!byCategory.has(item.category)) byCategory.set(item.category, []);
       byCategory.get(item.category).push(item);
     });
     const order = [...SHOPPING_CATEGORIES.map((c) => c.key), "other"];
     const labels = Object.fromEntries([...SHOPPING_CATEGORIES.map((c) => [c.key, c.label]), ["other", "Autres"]]);
 
-    const body = items.length
+    const activeBody = activeItems.length
       ? order
           .filter((key) => byCategory.has(key))
           .map((key) => `<div class="shopping-category">
             <h4>${labels[key]}</h4>
             <div class="shopping-items">
-              ${byCategory.get(key).map((item) => {
-                const isChecked = !!checked[item.key];
-                const qty = item.uncertain || item.quantity == null ? "quantité à ajuster" : `${item.quantity} ${item.unit}`.trim();
-                return `<label class="shopping-item ${isChecked ? "is-checked" : ""}">
-                  <input type="checkbox" data-shopping-toggle="${this._esc(item.key)}" ${isChecked ? "checked" : ""}>
-                  <span class="shopping-item-name">${this._esc(item.name)}</span>
-                  <span class="shopping-item-qty">${this._esc(qty)}</span>
-                </label>`;
-              }).join("")}
+              ${byCategory.get(key).map((item) => this._shoppingItemHTML(item, false)).join("")}
             </div>
           </div>`)
           .join("")
+      : "";
+
+    const stockedBody = stockedItems.length
+      ? `<details class="shopping-stocked">
+          <summary>En stock (${stockedItems.length})</summary>
+          <div class="shopping-items">
+            ${stockedItems.map((item) => this._shoppingItemHTML(item, true)).join("")}
+          </div>
+        </details>`
+      : "";
+
+    const body = items.length
+      ? `${activeBody}${stockedBody}`
       : this._emptyStateHTML("basket", "Rien à acheter : planifie ou ajoute des repas à cuisiner.");
 
     const todoEntityId = this._data?.preferences?.todo_entity_id;
