@@ -354,7 +354,13 @@ class ATableCoordinator:
         remaining = count
         while remaining > 0:
             batch_count = min(remaining, self._DRAFT_BATCH_SIZE)
-            batch_proposals = await self._generate_draft_batch(prefs, context, batch_count, already_titles)
+            batch_proposals: list[dict[str, Any]] = []
+            for attempt in range(2):
+                batch_proposals = await self._generate_draft_batch(prefs, context, batch_count, already_titles)
+                if batch_proposals:
+                    break
+                if attempt == 0:
+                    logger.warning(f"Lot de génération vide (tentative {attempt + 1}/2), nouvelle tentative…")
             if batch_proposals:
                 proposals.extend(batch_proposals)
                 already_titles.extend(p.get("title", "") for p in batch_proposals if p.get("title"))

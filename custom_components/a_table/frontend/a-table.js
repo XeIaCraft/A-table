@@ -102,6 +102,13 @@ function todayKey() {
   return WEEKDAY_KEYS[new Date().getDay()];
 }
 
+function timeOfDay() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "midday";
+  return "evening";
+}
+
 function cloneValue(value) {
   if (typeof structuredClone === "function") {
     try {
@@ -198,11 +205,74 @@ class ATableCard extends HTMLElement {
     this._cookSession = null;
     this._selectMode = false;
     this._selectedCardIds = new Set();
+    this._restored = false;
+    this._loadedHeroPhotos = new Set();
   }
 
   set hass(hass) {
     this._hass = hass;
+    if (!this._restored) {
+      this._restored = true;
+      this._restoreSession();
+    }
     if (!this._data && !this._loading) this._load();
+  }
+
+  // ---- Persistance locale (session de cuisson + chronos) -----------------
+
+  _persistSession() {
+    try {
+      const key = "a_table_session_v1";
+      if (!this._cookSession && !this._timers.size) {
+        localStorage.removeItem(key);
+        return;
+      }
+      const payload = {
+        cookSession: this._cookSession,
+        timers: Array.from(this._timers.entries()),
+      };
+      localStorage.setItem(key, JSON.stringify(payload));
+    } catch (error) {
+      /* localStorage indisponible (ex. navigation privée) — pas de persistance, tant pis. */
+    }
+  }
+
+  _restoreSession() {
+    let raw;
+    try {
+      raw = localStorage.getItem("a_table_session_v1");
+    } catch (error) {
+      return;
+    }
+    if (!raw) return;
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (error) {
+      return;
+    }
+    if (data?.cookSession) {
+      this._cookSession = data.cookSession;
+    }
+    if (Array.isArray(data?.timers) && data.timers.length) {
+      const now = Date.now();
+      this._timers = new Map(
+        data.timers.map(([id, timer]) => {
+          const restored = { ...timer };
+          if (restored.running && !restored.done) {
+            restored.remaining = Math.max(0, Math.round((restored.endTimestamp - now) / 1000));
+            if (restored.remaining <= 0) {
+              restored.remaining = 0;
+              restored.running = false;
+              restored.done = true;
+            }
+          }
+          return [id, restored];
+        })
+      );
+      const stillRunning = [...this._timers.values()].some((t) => t.running && !t.done);
+      if (stillRunning) this._startTimerInterval();
+    }
   }
 
   setConfig() {
@@ -269,7 +339,7 @@ class ATableCard extends HTMLElement {
     const swatchStyle = `--sw-from:${pal.from};--sw-to:${pal.to}`;
     const hasPhoto = recipe.image_status === "found" && recipe.image_url;
     const swatch = hasPhoto
-      ? `<button class="meal-swatch meal-swatch-photo" type="button" data-detail="${this._esc(card.id)}" aria-label="Détails de ${this._esc(recipe.title)}"><img src="${this._esc(recipe.image_url)}" alt="" loading="lazy"></button>`
+      ? `<button class="meal-swatch meal-swatch-photo at-img-wrap" type="button" data-detail="${this._esc(card.id)}" aria-label="Détails de ${this._esc(recipe.title)}"><img src="${this._esc(recipe.image_url)}" alt="" loading="lazy" onload="this.closest('.at-img-wrap').classList.add('loaded')"></button>`
       : `<button class="meal-swatch" type="button" style="${swatchStyle}" data-detail="${this._esc(card.id)}" aria-label="Détails de ${this._esc(recipe.title)}">${icon(categoryIcon(recipe.tags))}</button>`;
     const selected = this._selectMode && this._selectedCardIds.has(card.id);
     const selectMark = this._selectMode ? `<span class="meal-select-mark ${selected ? "is-checked" : ""}">${selected ? icon("check") : ""}</span>` : "";
@@ -352,12 +422,11 @@ class ATableCard extends HTMLElement {
     const recipe = this._recipe(card);
     const hasPhoto = recipe.image_status === "found" && recipe.image_url;
     const pal = categoryPalette(recipe.tags);
-    const bgStyle = hasPhoto
-      ? `background-image:url('${this._esc(recipe.image_url)}')`
-      : `background-image:linear-gradient(150deg,${pal.from},${pal.to})`;
+    const placeholderStyle = `background-image:linear-gradient(150deg,${pal.from},${pal.to})`;
+    const todClass = `hero-card--${timeOfDay()}`;
     return `<section class="hero enter">
       <h2 class="at-section-title">Aujourd'hui</h2>
-      <div class="hero-card" style="${bgStyle}">
+      <div class="hero-card ${todClass}" style="${placeholderStyle}" ${hasPhoto ? `data-hero-photo-url="${this._esc(recipe.image_url)}"` : ""}>
         <div class="hero-scrim">
           <h3 class="at-dish-title">${this._esc(recipe.title)}</h3>
           <div class="hero-actions">
@@ -367,6 +436,29 @@ class ATableCard extends HTMLElement {
         </div>
       </div>
     </section>`;
+  }
+
+  _bindHeroPhoto(root) {
+    const heroCard = root.querySelector(".hero-card[data-hero-photo-url]");
+    if (!heroCard) return;
+    const url = heroCard.dataset.heroPhotoUrl;
+    if (!url) return;
+    if (!this._loadedHeroPhotos) this._loadedHeroPhotos = new Set();
+    if (this._loadedHeroPhotos.has(url)) {
+      heroCard.style.backgroundImage = `url('${url}')`;
+      heroCard.classList.add("loaded");
+      return;
+    }
+    const preload = new Image();
+    preload.onload = () => {
+      this._loadedHeroPhotos.add(url);
+      // Le rendu a pu se relancer entre-temps : ne touche que si la carte du DOM cherche toujours cette URL.
+      if (heroCard.isConnected && heroCard.dataset.heroPhotoUrl === url) {
+        heroCard.style.backgroundImage = `url('${url}')`;
+        heroCard.classList.add("loaded");
+      }
+    };
+    preload.src = url;
   }
 
   _bindWeekDots(root) {
@@ -509,7 +601,11 @@ class ATableCard extends HTMLElement {
       .hero{margin-bottom:var(--at-space-4)}
       .hero .at-section-title{margin:0 0 12px;font-size:16px}
       .hero-card{position:relative;border-radius:var(--at-radius-xl);overflow:hidden;min-height:190px;background-size:cover;background-position:center;display:flex;align-items:flex-end;border:1px solid var(--at-border)}
-      .hero-scrim{width:100%;padding:18px;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,.1) 70%,transparent);color:#fff}
+      .hero-card::before{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:soft-light;opacity:.85;z-index:0}
+      .hero-card--morning::before{background:linear-gradient(150deg,#ffb066,#ff8a5c)}
+      .hero-card--midday::before{background:linear-gradient(150deg,#d9dde6,#c7ccda);opacity:.25}
+      .hero-card--evening::before{background:linear-gradient(150deg,#2c2a6b,#5b3a9e)}
+      .hero-scrim{position:relative;z-index:1;width:100%;padding:18px;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,.1) 70%,transparent);color:#fff}
       .hero-scrim h3{margin:0 0 12px;font-size:clamp(20px,2.4vw,28px);font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.5)}
       .hero-actions{display:flex;gap:10px;flex-wrap:wrap}
       .hero-actions .pill{background:color-mix(in srgb,var(--card-background-color,#171a20) 78%,transparent)!important;border-color:color-mix(in srgb,var(--primary-text-color,#fff) 18%,transparent)!important;color:var(--primary-text-color,#f4f6fa)!important;text-shadow:0 1px 3px rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
@@ -595,6 +691,10 @@ class ATableCard extends HTMLElement {
       .backlog-zone .meal{aspect-ratio:auto;height:170px}
       .skeleton-wrap{display:grid;gap:12px}
       .skeleton{border-radius:var(--at-radius-md);background:linear-gradient(100deg,var(--at-surface-1) 30%,var(--at-surface-2) 50%,var(--at-surface-1) 70%);background-size:200% 100%;animation:at-shimmer 1.4s ease-in-out infinite}
+      .at-img-wrap{position:relative;background:linear-gradient(100deg,var(--at-surface-1) 30%,var(--at-surface-2) 50%,var(--at-surface-1) 70%);background-size:200% 100%;animation:at-shimmer 1.4s ease-in-out infinite}
+      .at-img-wrap img{opacity:0;transition:opacity .25s ease}
+      .at-img-wrap.loaded{animation:none;background:none}
+      .at-img-wrap.loaded img{opacity:1}
       .skeleton-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
       @keyframes at-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
       .add-row{display:flex;justify-content:flex-end;margin-top:var(--at-space-4)}
@@ -928,6 +1028,7 @@ class ATableCard extends HTMLElement {
     root.querySelector(".generate")?.addEventListener("click", (event) => this._generate(event.currentTarget));
     root.querySelectorAll("[data-hero-generate]").forEach((btn) => btn.addEventListener("click", () => this._scrollToGenerator()));
     this._bindWeekDots(root);
+    this._bindHeroPhoto(root);
     this._cleanupEnterAnimations(root);
     root.querySelectorAll("[data-count]").forEach((button) =>
       button.addEventListener("click", () => {
@@ -1417,6 +1518,12 @@ class ATableCard extends HTMLElement {
     return /^h/i.test(match[2]) ? value * 60 : value;
   }
 
+  _startTimerInterval() {
+    if (!this._timerInterval) {
+      this._timerInterval = setInterval(() => this._tickTimers(), 1000);
+    }
+  }
+
   _addTimer(name, minutes) {
     if (!minutes || minutes <= 0) return;
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
@@ -1432,10 +1539,9 @@ class ATableCard extends HTMLElement {
       running: true,
       done: false,
     });
-    if (!this._timerInterval) {
-      this._timerInterval = setInterval(() => this._tickTimers(), 1000);
-    }
+    this._startTimerInterval();
     this._renderTimersList();
+    this._persistSession();
   }
 
   _notifyTimerDone(name) {
@@ -1464,7 +1570,10 @@ class ATableCard extends HTMLElement {
         }
       }
     });
-    if (changed) this._renderTimersList();
+    if (changed) {
+      this._renderTimersList();
+      this._persistSession();
+    }
   }
 
   _formatTimer(seconds) {
@@ -1512,6 +1621,7 @@ class ATableCard extends HTMLElement {
           timer.running = !timer.running;
           if (timer.running) timer.endTimestamp = Date.now() + timer.remaining * 1000;
           this._renderTimersList();
+          this._persistSession();
         }
       });
     });
@@ -1519,6 +1629,7 @@ class ATableCard extends HTMLElement {
       btn.addEventListener("click", () => {
         this._timers.delete(btn.dataset.timerRemove);
         this._renderTimersList();
+        this._persistSession();
       });
     });
   }
@@ -1589,6 +1700,7 @@ class ATableCard extends HTMLElement {
       return;
     }
     this._cookSession = { recipes, plan: null, stepIndex: 0, phase: "prep", loading: recipes.length > 1 };
+    this._persistSession();
     this._modal = { type: "cook" };
     this._mountModal();
     this._requestWakeLock();
@@ -1603,12 +1715,14 @@ class ATableCard extends HTMLElement {
         this._cookSession.plan = this._flatCookPlan(recipes);
       }
       this._cookSession.loading = false;
+      this._persistSession();
       if (this._modal?.type === "cook") this._mountModal();
     }
   }
 
   _finishCookSession() {
     this._cookSession = null;
+    this._persistSession();
     this._closeModal();
   }
 
@@ -1737,17 +1851,20 @@ class ATableCard extends HTMLElement {
     overlay.querySelector("[data-cook-finish]")?.addEventListener("click", () => this._finishCookSession());
     overlay.querySelector("[data-cook-start]")?.addEventListener("click", () => {
       if (this._cookSession) this._cookSession.phase = "steps";
+      this._persistSession();
       this._mountModal();
     });
     overlay.querySelector("[data-cook-prev]")?.addEventListener("click", () => {
       if (!this._cookSession) return;
       this._cookSession.stepIndex = Math.max(0, this._cookSession.stepIndex - 1);
+      this._persistSession();
       this._mountModal();
     });
     overlay.querySelector("[data-cook-next]")?.addEventListener("click", () => {
       if (!this._cookSession) return;
       const steps = this._cookModeSteps();
       this._cookSession.stepIndex = Math.min(steps.length - 1, this._cookSession.stepIndex + 1);
+      this._persistSession();
       this._mountModal();
     });
     this._bindTimers(overlay);
@@ -1796,7 +1913,7 @@ class ATableCard extends HTMLElement {
         ? `<div><strong>Prix par portion</strong><br>${this._esc(recipe.price_per_serving)} €</div>`
         : "";
       const imageBlock = recipe.image_status === "found" && recipe.image_url
-        ? `<div class="recipe-image"><img src="${this._esc(recipe.image_url)}" alt="${this._esc(recipe.title)}" loading="lazy"></div>`
+        ? `<div class="recipe-image at-img-wrap"><img src="${this._esc(recipe.image_url)}" alt="${this._esc(recipe.title)}" loading="lazy" onload="this.closest('.at-img-wrap').classList.add('loaded')"></div>`
         : "";
       overlay.innerHTML = `<section class="dialog">
         <header class="dialog-top">
@@ -1878,7 +1995,7 @@ class ATableCard extends HTMLElement {
                   ? `<div class="proposal-meta"><span>${this._esc(p.price_per_serving)} € / portion</span></div>`
                   : "";
                 const proposalImage = p.image_status === "found" && p.image_url
-                  ? `<div class="proposal-image"><img src="${this._esc(p.image_url)}" alt="" loading="lazy"></div>`
+                  ? `<div class="proposal-image at-img-wrap"><img src="${this._esc(p.image_url)}" alt="" loading="lazy" onload="this.closest('.at-img-wrap').classList.add('loaded')"></div>`
                   : "";
                 return `<div class="proposal" data-proposal-index="${i}">
                   ${proposalImage}
@@ -2868,7 +2985,7 @@ class ATableCard extends HTMLElement {
   _guestPhotoBlockHTML(item) {
     const hasPhoto = item?.image_status === "found" && item?.image_url;
     if (hasPhoto) {
-      return `<div class="recipe-image guest-course-image"><img src="${this._esc(item.image_url)}" alt="${this._esc(item.title || "")}" loading="lazy"></div>`;
+      return `<div class="recipe-image guest-course-image at-img-wrap"><img src="${this._esc(item.image_url)}" alt="${this._esc(item.title || "")}" loading="lazy" onload="this.closest('.at-img-wrap').classList.add('loaded')"></div>`;
     }
     const pal = categoryPalette(item?.tags);
     return `<div class="recipe-image guest-course-image guest-course-image-fallback" style="background:linear-gradient(150deg,${pal.from},${pal.to})">${icon(categoryIcon(item?.tags))}</div>`;
