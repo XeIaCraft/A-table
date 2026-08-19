@@ -22,6 +22,21 @@ logger = logging.getLogger(__name__)
 DEFAULT_AI_TASK_ENTITY_ID = "ai_task.google_ai_task"
 
 
+def _valid_step_labels(steps: Any, step_labels: Any) -> list[str]:
+    """Ne garde `step_labels` que si c'est une liste de chaînes de même longueur que `steps`.
+
+    Réponse IA imparfaite (champ absent ou longueur incohérente) -> le frontend retombe sur son
+    propre libellé tronqué, donc on ignore silencieusement le champ plutôt que de lever une erreur.
+    """
+    if not isinstance(step_labels, list) or not isinstance(steps, list):
+        return []
+    if len(step_labels) != len(steps):
+        return []
+    if not all(isinstance(s, str) for s in step_labels):
+        return []
+    return step_labels
+
+
 def _unescape_html_entities(value: Any) -> Any:
     """Décode récursivement les entités HTML (ex. &#039;) que l'IA insère parfois dans du texte brut.
 
@@ -45,7 +60,10 @@ RECIPE_QUALITY_GUIDELINES = (
     "comme \"Plat du mardi\" ou \"Recette rapide\".\n"
     "- Les étapes doivent être suffisamment détaillées (temps de cuisson, quantités, "
     "températures quand pertinent) pour qu'un débutant puisse suivre sans ambiguïté : "
-    "au moins 4 à 6 étapes selon la complexité du plat, jamais une seule phrase vague."
+    "au moins 4 à 6 étapes selon la complexité du plat, jamais une seule phrase vague.\n"
+    "- Pour chaque étape, fournis aussi un libellé court et actionnable (3 à 5 mots, ex. "
+    "\"Cuire les pâtes\") dans le champ \"step_labels\" parallèle, dans le même ordre et de la "
+    "même longueur que \"steps\"."
 )
 
 # Miroir exact de OBJECTIVE_OPTIONS dans frontend/a-table.js — garder synchronisé.
@@ -224,27 +242,26 @@ class ATableCoordinator:
         await self.store.async_save()
         return history_item
 
-    async def async_generate_draft(
-        self,
-        count: int = 6,
-    ) -> dict[str, Any]:
-        """Génère un brouillon de propositions de repas via ai_task."""
-        prefs = self.store.data.get("preferences", {})
-        rules = self.store.data.get("generation_rules", {})
-        temp_ings = self.store.data.get("temporary_ingredients", [])
-        recipes = self.store.data.get("recipes", {})
-        history = self.store.data.get("history", [])
+    _DRAFT_BATCH_SIZE = 3
 
-        count = min(count, 7)  # max 7
-
-        context = self._build_prompt_context(count, prefs, rules, temp_ings, recipes, history)
-
-        instructions = (
+    def _build_draft_instructions(
+        self, context: str, batch_count: int, already_titles: list[str] | None = None
+    ) -> str:
+        """Construit le prompt de génération de propositions pour un lot (batch) donné."""
+        diversity_note = ""
+        if already_titles:
+            titles_list = "\n".join(f"- {t}" for t in already_titles)
+            diversity_note = (
+                "\n\nPROPOSITIONS DÉJÀ RETENUES DANS CETTE MÊME GÉNÉRATION (à ne surtout pas "
+                f"répéter, choisis des idées distinctes) :\n{titles_list}"
+            )
+        return (
             "Tu es un assistant de planification de repas. "
             "Propose des recettes réalistes, appétissantes, cohérentes et adaptées au foyer. "
             "Écris de manière naturelle, comme un vrai humain qui cuisine.\n\n"
             "CONTEXTE UTILISATEUR (à respecter strictement) :\n"
-            f"{context}\n\n"
+            f"{context}"
+            f"{diversity_note}\n\n"
             f"{RECIPE_QUALITY_GUIDELINES}\n\n"
             "RÉSULTAT ATTENDU :\n"
             "Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, exactement au format :\n"
@@ -258,6 +275,7 @@ class ATableCoordinator:
             '        {"name": "pâtes", "quantity": 200, "unit": "g"}\n'
             "      ],\n"
             '      "steps": ["Étape 1...", "Étape 2..."],\n'
+            '      "step_labels": ["un court libellé actionnable par étape (3-5 mots), ex. \'Cuire les pâtes\'", "..."],\n'
             '      "notes": "...",\n'
             '      "nutrition": {\n'
             '        "kcal": 420,\n'
@@ -272,35 +290,78 @@ class ATableCoordinator:
             "    }\n"
             "  ]\n"
             "}\n\n"
-            f"Propose {count} idées de repas conformes au contexte ci-dessus."
+            f"Propose {batch_count} idées de repas conformes au contexte ci-dessus."
         )
 
-        response = await self.hass.services.async_call(
-            "ai_task",
-            "generate_data",
-            {
-                "task_name": "Génération de propositions de repas",
-                "entity_id": self._ai_task_entity_id(prefs),
-                "instructions": instructions,
-            },
-            blocking=True,
-            return_response=True,
-        )
-
-        response_text = response.get("data") or response.get("response") or response.get("result") or ""
-
-        logger.info(f"Réponse brute de Gemini : {response_text[:1000]}")
-
-        json_match = re.search(r"\{[\s\S]*\}", response_text)
-        if json_match:
-            response_text = json_match.group(0)
-
+    async def _generate_draft_batch(
+        self, prefs: dict[str, Any], context: str, batch_count: int, already_titles: list[str]
+    ) -> list[dict[str, Any]]:
+        """Un seul appel ai_task pour un lot de propositions. Ne lève jamais : renvoie [] en cas d'échec."""
+        instructions = self._build_draft_instructions(context, batch_count, already_titles)
         try:
+            response = await self.hass.services.async_call(
+                "ai_task",
+                "generate_data",
+                {
+                    "task_name": "Génération de propositions de repas",
+                    "entity_id": self._ai_task_entity_id(prefs),
+                    "instructions": instructions,
+                },
+                blocking=True,
+                return_response=True,
+            )
+            response_text = response.get("data") or response.get("response") or response.get("result") or ""
+            logger.info(f"Réponse brute de Gemini (lot de {batch_count}) : {response_text[:1000]}")
+
+            json_match = re.search(r"\{[\s\S]*\}", response_text)
+            if json_match:
+                response_text = json_match.group(0)
+
             parsed = json.loads(response_text)
             proposals = _unescape_html_entities(parsed.get("proposals", []))
+            if not isinstance(proposals, list):
+                raise ValueError("Champ 'proposals' invalide")
+            for proposal in proposals:
+                proposal["step_labels"] = _valid_step_labels(proposal.get("steps") or [], proposal.get("step_labels"))
+            return proposals
         except Exception as e:
-            logger.error(f"Erreur de parsing JSON : {e}")
-            proposals = []
+            logger.error(f"Erreur de parsing JSON pour un lot de génération de propositions : {e}")
+            return []
+
+    async def async_generate_draft(
+        self,
+        count: int = 6,
+    ) -> dict[str, Any]:
+        """Génère un brouillon de propositions de repas via ai_task, en plusieurs lots si nécessaire.
+
+        Au-delà de `_DRAFT_BATCH_SIZE` plats, un seul appel ai_task dépasse souvent la limite de
+        tokens de sortie du modèle (contenu détaillé par plat) et revient tronqué. On découpe donc
+        en plusieurs appels séquentiels, en passant les titres déjà proposés aux lots suivants pour
+        éviter les doublons. Un lot qui échoue individuellement ne bloque pas les autres.
+        """
+        prefs = self.store.data.get("preferences", {})
+        rules = self.store.data.get("generation_rules", {})
+        temp_ings = self.store.data.get("temporary_ingredients", [])
+        recipes = self.store.data.get("recipes", {})
+        history = self.store.data.get("history", [])
+
+        count = min(count, 7)  # max 7
+
+        context = self._build_prompt_context(count, prefs, rules, temp_ings, recipes, history)
+
+        proposals: list[dict[str, Any]] = []
+        already_titles: list[str] = []
+        remaining = count
+        while remaining > 0:
+            batch_count = min(remaining, self._DRAFT_BATCH_SIZE)
+            batch_proposals = await self._generate_draft_batch(prefs, context, batch_count, already_titles)
+            if batch_proposals:
+                proposals.extend(batch_proposals)
+                already_titles.extend(p.get("title", "") for p in batch_proposals if p.get("title"))
+            remaining -= batch_count
+
+        if not proposals:
+            raise ValueError("Génération impossible, réessaie avec moins de plats ou réessaie plus tard.")
 
         pexels_key = prefs.get("pexels_api_key")
         if pexels_key:
@@ -636,6 +697,7 @@ class ATableCoordinator:
                 "cooking_minutes": mod.get("cooking_minutes", proposal.get("cooking_minutes", 30)),
                 "ingredients": ingredients,
                 "steps": mod.get("steps", proposal.get("steps", [])),
+                "step_labels": mod.get("step_labels", proposal.get("step_labels", [])),
                 "notes": mod.get("notes", proposal.get("notes", "")),
                 "nutrition": mod.get("nutrition", proposal.get("nutrition", {})),
                 "tags": mod.get("tags", proposal.get("tags", [])),
@@ -735,6 +797,7 @@ class ATableCoordinator:
             '    {"name": "pâtes", "quantity": 200, "unit": "g"}\n'
             "  ],\n"
             '  "steps": ["Étape 1...", "Étape 2..."],\n'
+            '  "step_labels": ["Cuire les pâtes", "..."],\n'
             '  "notes": "...",\n'
             '  "nutrition": {"kcal": 420, "protein_g": 12, "carb_g": 55, "fat_g": 14, "fiber_g": 8},\n'
             '  "tags": ["rapide", "végétarien"],\n'
@@ -766,6 +829,7 @@ class ATableCoordinator:
             if not isinstance(new_proposal, dict) or not new_proposal.get("title"):
                 raise ValueError("Réponse IA invalide")
             new_proposal = _unescape_html_entities(new_proposal)
+            new_proposal["step_labels"] = _valid_step_labels(new_proposal.get("steps") or [], new_proposal.get("step_labels"))
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (remplacement de proposition) : {e}")
             raise ValueError("L'IA n'a pas pu générer de remplacement. Réessaie.") from e
@@ -792,6 +856,7 @@ class ATableCoordinator:
             "cooking_minutes": current_recipe.get("cooking_minutes"),
             "ingredients": current_recipe.get("ingredients", []),
             "steps": current_recipe.get("steps", []),
+            "step_labels": current_recipe.get("step_labels", []),
             "notes": current_recipe.get("notes", ""),
             "nutrition": current_recipe.get("nutrition", {}),
             "tags": current_recipe.get("tags", []),
@@ -1146,6 +1211,7 @@ class ATableCoordinator:
             '  "cooking_minutes": 25,\n'
             '  "ingredients": [{"name": "pâtes", "quantity": 200, "unit": "g"}],\n'
             '  "steps": ["Étape 1...", "Étape 2..."],\n'
+            '  "step_labels": ["Cuire les pâtes", "..."],\n'
             '  "notes": "...",\n'
             '  "nutrition": {"kcal": 420, "protein_g": 12, "carb_g": 55, "fat_g": 14, "fiber_g": 8},\n'
             '  "tags": ["rapide", "végétarien"],\n'
@@ -1207,6 +1273,7 @@ class ATableCoordinator:
             "tags": parsed.get("tags") or [],
             "ingredients": parsed.get("ingredients") or [],
             "steps": parsed.get("steps") or [],
+            "step_labels": _valid_step_labels(parsed.get("steps") or [], parsed.get("step_labels")),
             "notes": parsed.get("notes", ""),
             "nutrition": parsed.get("nutrition") or {},
             "image_url": None,
@@ -1275,14 +1342,32 @@ class ATableCoordinator:
             return (
                 f'    "{key}": {{"title": "...", "notes": "...", "items": [{{"title": "...", '
                 f'"ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], "steps": ["..."], '
+                '"step_labels": ["un court libellé actionnable par étape (3-5 mots), même longueur que steps"], '
                 f'"nutrition": {self._NUTRITION_SKELETON}, '
                 '"image_query": "short English stock-photo search phrase for this dish, 3-5 words"}]}'
             )
         return (
             f'    "{key}": {{"title": "...", "ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], '
-            f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}, '
+            f'"steps": ["..."], '
+            '"step_labels": ["un court libellé actionnable par étape (3-5 mots), même longueur que steps"], '
+            f'"notes": "...", "nutrition": {self._NUTRITION_SKELETON}, '
             '"image_query": "short English stock-photo search phrase for this dish, 3-5 words"}'
         )
+
+    def _sanitize_courses_step_labels(self, courses: dict[str, Any] | None, keys: list[str]) -> None:
+        """Applique `_valid_step_labels` en place sur chaque plat/variante d'un menu invité."""
+        if not isinstance(courses, dict):
+            return
+        for key in keys:
+            course = courses.get(key)
+            if not isinstance(course, dict):
+                continue
+            if isinstance(course.get("items"), list):
+                for item in course["items"]:
+                    if isinstance(item, dict):
+                        item["step_labels"] = _valid_step_labels(item.get("steps") or [], item.get("step_labels"))
+            else:
+                course["step_labels"] = _valid_step_labels(course.get("steps") or [], course.get("step_labels"))
 
     WINE_INSTRUCTION = (
         "Propose 2 à 4 suggestions d'accord mets-vins sous forme d'appellations ou dénominations "
@@ -1375,6 +1460,7 @@ class ATableCoordinator:
                 raise ValueError("Réponse IA invalide")
             parsed = _unescape_html_entities(parsed)
             courses = parsed.get("courses")
+            self._sanitize_courses_step_labels(courses, selected)
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (menu invité) : {e}")
             raise ValueError("L'IA n'a pas pu générer ce menu. Réessaie.") from e
@@ -1472,7 +1558,9 @@ class ATableCoordinator:
                 "d'ingrédients/techniques).\n\n"
                 "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
                 'exactement au format : {"title": "...", "ingredients": [{"name": "...", "quantity": 1, '
-                f'"unit": "..."}}], "steps": ["..."], "nutrition": {self._NUTRITION_SKELETON}, '
+                f'"unit": "..."}}], "steps": ["..."], '
+                '"step_labels": ["un court libellé actionnable par étape (3-5 mots), même longueur que steps"], '
+                f'"nutrition": {self._NUTRITION_SKELETON}, '
                 '"image_query": "short English stock-photo search phrase for this dish, 3-5 words"}'
             )
         else:
@@ -1487,7 +1575,9 @@ class ATableCoordinator:
                 if is_composed
                 else (
                     '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], '
-                    f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}, '
+                    f'"steps": ["..."], '
+                    '"step_labels": ["un court libellé actionnable par étape (3-5 mots), même longueur que steps"], '
+                    f'"notes": "...", "nutrition": {self._NUTRITION_SKELETON}, '
                     '"image_query": "short English stock-photo search phrase for this dish, 3-5 words"}'
                 )
             )
@@ -1524,6 +1614,11 @@ class ATableCoordinator:
             if not isinstance(new_value, dict) or not new_value.get("title"):
                 raise ValueError("Réponse IA invalide")
             new_value = _unescape_html_entities(new_value)
+            new_value["step_labels"] = _valid_step_labels(new_value.get("steps") or [], new_value.get("step_labels"))
+            if isinstance(new_value.get("items"), list):
+                for item in new_value["items"]:
+                    if isinstance(item, dict):
+                        item["step_labels"] = _valid_step_labels(item.get("steps") or [], item.get("step_labels"))
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (plat du menu invité) : {e}")
             raise ValueError("L'IA n'a pas pu générer de remplacement. Réessaie.") from e

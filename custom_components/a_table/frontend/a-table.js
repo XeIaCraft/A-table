@@ -144,6 +144,7 @@ const ICONS = {
   play: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="currentColor"><path d="M6 4.5v11l9-5.5-9-5.5z"/></svg>',
   message: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h14v9H8.5L5 16.5v-3H3v-9z"/></svg>',
   arrowDown: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v13M4.5 10.5 10 16l5.5-5.5"/></svg>',
+  filter: '<svg viewBox="0 0 20 20" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h14L11.5 11v5L8.5 17.5V11L3 4.5z"/></svg>',
 };
 
 function icon(name, extraClass) {
@@ -511,7 +512,10 @@ class ATableCard extends HTMLElement {
       .hero-scrim{width:100%;padding:18px;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,.1) 70%,transparent);color:#fff}
       .hero-scrim h3{margin:0 0 12px;font-size:clamp(20px,2.4vw,28px);font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.5)}
       .hero-actions{display:flex;gap:10px;flex-wrap:wrap}
-      .hero-actions .pill{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+      .hero-actions .pill{background:color-mix(in srgb,var(--card-background-color,#171a20) 78%,transparent)!important;border-color:color-mix(in srgb,var(--primary-text-color,#fff) 18%,transparent)!important;color:var(--primary-text-color,#f4f6fa)!important;text-shadow:0 1px 3px rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+      .hero-actions .pill .icon{color:inherit}
+      .hero-actions .pill.pill-ok .icon{color:var(--at-accent-ok)}
+      .hero-actions .pill.pill-neutral .icon{color:var(--secondary-text-color,#aeb7c5)}
       .hero-empty .hero-fallback{display:flex;flex-direction:column;align-items:center;gap:12px;padding:26px;border-radius:var(--at-radius-xl);border:1px dashed var(--at-border);background:var(--at-glass-1);color:var(--secondary-text-color,#aeb7c5);text-align:center}
       .backlog{padding:var(--at-space-3);border:1px solid var(--at-border);border-radius:var(--at-radius-md);margin-bottom:var(--at-space-4);background:var(--at-glass-1)}
       .section-head,.day header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:750;text-transform:uppercase;letter-spacing:.03em;color:var(--secondary-text-color,#aeb7c5)}
@@ -613,19 +617,20 @@ class ATableCard extends HTMLElement {
       .cook-prep-dish-title{font-family:var(--at-font-display);font-size:18px;margin:0 0 8px}
       .cook-prep ul{margin:0;padding-left:20px;line-height:1.7}
       .cook-lyrics{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0;padding:12px}
-      .cook-lyric{position:absolute;left:0;right:0;text-align:center;padding:0 16px;transition:transform 200ms var(--at-ease),opacity 200ms var(--at-ease),font-size 200ms var(--at-ease)}
+      .cook-lyric{position:absolute;left:0;right:0;top:50%;text-align:center;padding:0 16px;transform:translateY(-50%);transition:transform 200ms var(--at-ease),opacity 200ms var(--at-ease),font-size 200ms var(--at-ease)}
       .cook-lyric p{font-family:var(--at-font-display);margin:0;line-height:1.4}
-      .cook-lyric.step-current{position:relative;opacity:1;font-size:clamp(20px,4vw,32px);transform:translateY(0) scale(1)}
+      .cook-lyric.step-current{position:relative;top:auto;opacity:1;font-size:clamp(20px,4vw,32px);transform:translateY(0) scale(1)}
       .cook-lyric.step-current p{font-size:1em}
-      .cook-lyric.step-prev-1,.cook-lyric.step-next-1{opacity:.55;font-size:16px;transform:translateY(0) scale(.92)}
-      .cook-lyric.step-prev-1{transform:translateY(-56px) scale(.92)}
-      .cook-lyric.step-next-1{transform:translateY(56px) scale(.92)}
+      .cook-lyric.step-prev-1,.cook-lyric.step-next-1,.cook-lyric.step-prev-2,.cook-lyric.step-next-2,.cook-lyric.step-prev-3plus,.cook-lyric.step-next-3plus{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .cook-lyric.step-prev-1,.cook-lyric.step-next-1{opacity:.55;font-size:16px}
+      .cook-lyric.step-prev-1{transform:translateY(calc(-50% - 72px)) scale(.92)}
+      .cook-lyric.step-next-1{transform:translateY(calc(-50% + 72px)) scale(.92)}
       .cook-lyric.step-prev-2,.cook-lyric.step-next-2{opacity:.3;font-size:13px}
-      .cook-lyric.step-prev-2{transform:translateY(-96px) scale(.85)}
-      .cook-lyric.step-next-2{transform:translateY(96px) scale(.85)}
+      .cook-lyric.step-prev-2{transform:translateY(calc(-50% - 126px)) scale(.85)}
+      .cook-lyric.step-next-2{transform:translateY(calc(-50% + 126px)) scale(.85)}
       .cook-lyric.step-prev-3plus,.cook-lyric.step-next-3plus{opacity:0;font-size:12px;pointer-events:none}
-      .cook-lyric.step-prev-3plus{transform:translateY(-130px) scale(.8)}
-      .cook-lyric.step-next-3plus{transform:translateY(130px) scale(.8)}
+      .cook-lyric.step-prev-3plus{transform:translateY(calc(-50% - 170px)) scale(.8)}
+      .cook-lyric.step-next-3plus{transform:translateY(calc(-50% + 170px)) scale(.8)}
       @media (prefers-reduced-motion: reduce){.cook-lyric{transition:none}}
       @keyframes at-fade{from{opacity:0}to{opacity:1}}
       @keyframes at-pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
@@ -772,7 +777,12 @@ class ATableCard extends HTMLElement {
       .library-search{display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:var(--at-surface-1);margin-top:var(--at-space-3)}
       .library-search .icon{color:var(--secondary-text-color,#aeb7c5)}
       .library-search input{border:0;background:transparent;padding-left:0}
-      .library-tags{margin-top:var(--at-space-3)}
+      .library-tags{margin-top:var(--at-space-3);position:relative}
+      .library-filters-anchor{position:relative;display:inline-flex}
+      .library-filters-panel{position:absolute;top:calc(100% + 8px);left:0;z-index:20;min-width:240px;max-width:min(360px,80vw);max-height:280px;overflow:auto;padding:12px;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 14%,transparent);border-radius:var(--at-radius-md);background:color-mix(in srgb,var(--card-background-color,#171a20) 96%,transparent);box-shadow:0 16px 40px rgba(0,0,0,.4);animation:at-pop 150ms var(--at-ease)}
+      @media (max-width:680px){
+        .library-filters-panel{position:fixed;top:auto;bottom:0;left:0;right:0;width:100%;max-width:100%;max-height:60vh;border-radius:var(--at-radius-xl) var(--at-radius-xl) 0 0;box-shadow:0 -16px 40px rgba(0,0,0,.45)}
+      }
       .library-fav-filter{flex-direction:row;margin-top:var(--at-space-3);align-items:center}
       .library-results{margin-top:var(--at-space-3);max-height:48vh;overflow:auto}
       .library-list{display:grid;gap:8px}
@@ -866,7 +876,7 @@ class ATableCard extends HTMLElement {
                   <span>${count}</span>
                   <button type="button" data-count="plus" aria-label="Plus">+</button>
                 </div>
-                <button class="generate" type="button">Générer</button>
+                <button class="generate" type="button"><span data-generate-label>Générer</span></button>
               </div>
             </section>
             <section class="backlog">
@@ -910,7 +920,7 @@ class ATableCard extends HTMLElement {
     root.querySelector("[data-open-shopping]")?.addEventListener("click", () => this._openShopping());
     root.querySelector("[data-open-guest]")?.addEventListener("click", () => this._openGuest());
     root.querySelector(".add")?.addEventListener("click", () => this._openAdd());
-    root.querySelector(".generate")?.addEventListener("click", () => this._generate());
+    root.querySelector(".generate")?.addEventListener("click", (event) => this._generate(event.currentTarget));
     root.querySelectorAll("[data-hero-generate]").forEach((btn) => btn.addEventListener("click", () => this._scrollToGenerator()));
     this._bindWeekDots(root);
     this._cleanupEnterAnimations(root);
@@ -1155,16 +1165,20 @@ class ATableCard extends HTMLElement {
     setTimeout(clear, 1600);
   }
 
-  async _generate() {
+  async _generate(btn) {
     const count = Number(this._data.preferences?.default_recipe_count || 6);
+    const label = btn?.querySelector("[data-generate-label]");
+    if (btn) btn.disabled = true;
+    if (label) label.textContent = "Génération en cours…";
     try {
-      this._toast("Génération en cours…");
       const result = await this._ws({ type: "a_table/generate_draft", count });
       await this._load();
       this._modal = { type: "validate", draft_id: result.draft_id };
       this._mountModal();
     } catch (error) {
       this._toast(error?.message || "Génération impossible.", "error");
+      if (btn) btn.disabled = false;
+      if (label) label.textContent = "Générer";
     }
   }
 
@@ -1198,7 +1212,7 @@ class ATableCard extends HTMLElement {
   }
 
   _openLibrary() {
-    this._modal = { type: "library", search: "", tag: null, onlyFavorites: false, tagsExpanded: false };
+    this._modal = { type: "library", search: "", tag: null, onlyFavorites: false, filtersOpen: false };
     this._mountModal();
   }
 
@@ -1328,6 +1342,16 @@ class ATableCard extends HTMLElement {
   }
 
   // ---- Chronos de cuisson --------------------------------------------
+
+  _stepLabelFor(recipe, stepText) {
+    const labels = recipe?.step_labels;
+    const steps = recipe?.steps;
+    if (Array.isArray(labels) && Array.isArray(steps) && labels.length === steps.length) {
+      const index = steps.indexOf(stepText);
+      if (index !== -1 && labels[index]) return labels[index];
+    }
+    return this._stepShortLabel(stepText);
+  }
 
   _stepShortLabel(text) {
     const str = String(text || "").trim();
@@ -1638,7 +1662,7 @@ class ATableCard extends HTMLElement {
       const levelBadge = isCurrent ? this._cookStepLevelBadgeHTML(step.step_text) : "";
       const minutes = isCurrent ? this._stepTimerMinutes(step.step_text) : null;
       const timerBtn = minutes
-        ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc(this._stepShortLabel(step.step_text))}">⏱ Lancer (${minutes} min)</button>`
+        ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc(this._stepLabelFor(recipe, step.step_text))}">⏱ Lancer (${minutes} min)</button>`
         : "";
       return `<div class="cook-lyric ${this._cookStepClass(distance)}" data-step-index="${i}">
         ${dishBadge}
@@ -1718,7 +1742,7 @@ class ATableCard extends HTMLElement {
             .map((s) => {
               const minutes = this._stepTimerMinutes(s);
               const timerBtn = minutes
-                ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc(this._stepShortLabel(s))}">⏱ Lancer (${minutes} min)</button>`
+                ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc(this._stepLabelFor(recipe, s))}">⏱ Lancer (${minutes} min)</button>`
                 : "";
               return `<li>${this._esc(s)}${timerBtn}</li>`;
             })
@@ -2342,14 +2366,11 @@ class ATableCard extends HTMLElement {
     const state = this._modal;
     const tagCounts = this._libraryTagCounts();
     const sortedTags = Array.from(tagCounts.keys()).sort((a, b) => (tagCounts.get(b) - tagCounts.get(a)) || a.localeCompare(b));
-    const TAG_CAP = 8;
-    const visibleTags = state.tagsExpanded ? sortedTags : sortedTags.slice(0, TAG_CAP);
-    const hiddenCount = sortedTags.length - visibleTags.length;
-    // Si le tag sélectionné est dans la partie masquée, on l'affiche quand même pour garder son état visible.
-    if (state.tag && !visibleTags.includes(state.tag) && sortedTags.includes(state.tag)) {
-      visibleTags.push(state.tag);
-    }
+    const QUICK_TAG_CAP = 3;
+    const quickTags = sortedTags.slice(0, QUICK_TAG_CAP);
     const results = this._libraryRecipes();
+
+    const tagChip = (tag) => `<button type="button" class="chip filter-chip ${state.tag === tag ? "is-active" : ""}" data-library-tag="${this._esc(tag)}">${this._esc(tag)}</button>`;
 
     return `<section class="dialog dialog-lg">
       <header class="dialog-top">
@@ -2363,8 +2384,15 @@ class ATableCard extends HTMLElement {
       <div class="chip-group library-tags">
         <button type="button" class="chip filter-chip ${!state.tag ? "is-active" : ""}" data-library-tag="">Tous</button>
         <button type="button" class="chip filter-chip ${state.onlyFavorites ? "is-active" : ""}" data-library-fav>${icon("star", state.onlyFavorites ? "is-active" : "")} Favoris</button>
-        ${visibleTags.map((tag) => `<button type="button" class="chip filter-chip ${state.tag === tag ? "is-active" : ""}" data-library-tag="${this._esc(tag)}">${this._esc(tag)}</button>`).join("")}
-        ${hiddenCount > 0 ? `<button type="button" class="chip filter-chip" data-library-tags-toggle>+${hiddenCount}</button>` : (sortedTags.length > TAG_CAP ? `<button type="button" class="chip filter-chip" data-library-tags-toggle>Réduire</button>` : "")}
+        ${quickTags.map(tagChip).join("")}
+        ${sortedTags.length ? `<span class="library-filters-anchor">
+          <button type="button" class="chip filter-chip ${state.filtersOpen ? "is-active" : ""}" data-library-filters-open>${icon("filter")} Filtres${state.tag && !quickTags.includes(state.tag) ? " · 1" : ""}</button>
+          ${state.filtersOpen ? `<div class="library-filters-panel" data-library-filters-panel>
+            <div class="chip-group">
+              ${sortedTags.map(tagChip).join("")}
+            </div>
+          </div>` : ""}
+        </span>` : ""}
       </div>
       <div class="library-results" data-library-results>
         ${this._libraryResultsHTML(results)}
@@ -2456,10 +2484,22 @@ class ATableCard extends HTMLElement {
       this._modal.onlyFavorites = !this._modal.onlyFavorites;
       this._mountModal();
     });
-    overlay.querySelector("[data-library-tags-toggle]")?.addEventListener("click", () => {
-      this._modal.tagsExpanded = !this._modal.tagsExpanded;
+    overlay.querySelector("[data-library-filters-open]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._modal.filtersOpen = !this._modal.filtersOpen;
       this._mountModal();
     });
+    if (this._modal.filtersOpen) {
+      const onOutsideClick = (event) => {
+        const anchor = overlay.querySelector(".library-filters-anchor");
+        if (anchor && !anchor.contains(event.target)) {
+          this._modal.filtersOpen = false;
+          this._mountModal();
+        }
+      };
+      // Différé pour ne pas capter le clic qui vient d'ouvrir le panneau.
+      setTimeout(() => overlay.addEventListener("click", onOutsideClick, { once: true, capture: true }), 0);
+    }
 
     bindResultActions();
   }
@@ -2751,13 +2791,15 @@ class ATableCard extends HTMLElement {
     </div>`;
   }
 
-  _stepsWithTimersHTML(steps) {
+  _stepsWithTimersHTML(steps, stepLabels) {
     if (!steps?.length) return "";
+    const labelsMatch = Array.isArray(stepLabels) && stepLabels.length === steps.length;
     return `<ol>${steps
-      .map((s) => {
+      .map((s, i) => {
         const minutes = this._stepTimerMinutes(s);
+        const label = labelsMatch && stepLabels[i] ? stepLabels[i] : this._stepShortLabel(s);
         const timerBtn = minutes
-          ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc(this._stepShortLabel(s))}">⏱ Lancer (${minutes} min)</button>`
+          ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc(label)}">⏱ Lancer (${minutes} min)</button>`
           : "";
         return `<li>${this._esc(s)}${timerBtn}</li>`;
       })
@@ -2790,7 +2832,7 @@ class ATableCard extends HTMLElement {
             </div>
             ${this._guestPhotoBlockHTML(item)}
             <span>${this._esc(ingredients || "Aucun ingrédient")}</span>
-            ${this._stepsWithTimersHTML(item.steps)}
+            ${this._stepsWithTimersHTML(item.steps, item.step_labels)}
             ${this._nutritionGridHTML(item.nutrition)}
             <details class="refine-details">
               <summary>Ajuster cette variante</summary>
@@ -2808,7 +2850,7 @@ class ATableCard extends HTMLElement {
         <strong>Ingrédients</strong>
         <span>${this._esc(ingredients || "Aucun")}</span>
       </div>
-      ${course.steps?.length ? `<div class="proposal-section"><strong>Étapes</strong>${this._stepsWithTimersHTML(course.steps)}</div>` : ""}
+      ${course.steps?.length ? `<div class="proposal-section"><strong>Étapes</strong>${this._stepsWithTimersHTML(course.steps, course.step_labels)}</div>` : ""}
       ${this._nutritionGridHTML(course.nutrition) ? `<div class="proposal-section"><strong>Nutrition</strong>${this._nutritionGridHTML(course.nutrition)}</div>` : ""}`;
     }
     return `<div class="proposal guest-course-card" data-guest-course="${key}">
@@ -2932,10 +2974,24 @@ class ATableCard extends HTMLElement {
       if (!course) return;
       if (Array.isArray(course.items)) {
         course.items.forEach((item) => {
-          if (item?.title) recipes.push({ title: item.title, steps: item.steps || [] });
+          if (item?.title) {
+            recipes.push({
+              title: item.title,
+              steps: item.steps || [],
+              step_labels: item.step_labels || [],
+              ingredients: item.ingredients || [],
+              servings: menu.guests || null,
+            });
+          }
         });
       } else if (course.title) {
-        recipes.push({ title: course.title, steps: course.steps || [] });
+        recipes.push({
+          title: course.title,
+          steps: course.steps || [],
+          step_labels: course.step_labels || [],
+          ingredients: course.ingredients || [],
+          servings: menu.guests || null,
+        });
       }
     });
     return recipes;
