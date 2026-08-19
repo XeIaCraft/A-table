@@ -151,17 +151,16 @@ function icon(name, extraClass) {
   return extraClass ? svg.replace('class="icon', `class="icon ${extraClass}`) : svg;
 }
 
-function hashString(value) {
-  let hash = 0;
-  const str = String(value || "");
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash * 31 + str.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
+const CATEGORY_PALETTE = {
+  leaf: { name: "sauge", from: "#7c9b7a", to: "#4f6b4d" },
+  bolt: { name: "ambre", from: "#e0a850", to: "#a9702a" },
+  flame: { name: "terracotta", from: "#d17756", to: "#9a4a2e" },
+  snow: { name: "glace", from: "#8fb9c9", to: "#4d7a8c" },
+  dish: { name: "sable", from: "#c9b48a", to: "#93764f" },
+};
 
-function swatchHue(title) {
-  return hashString(title) % 360;
+function categoryPalette(tags) {
+  return CATEGORY_PALETTE[categoryIcon(tags)] || CATEGORY_PALETTE.dish;
 }
 
 const CATEGORY_ICON_RULES = [
@@ -261,28 +260,81 @@ class ATableCard extends HTMLElement {
     const cooking = Number.isInteger(recipe.cooking_minutes) ? `${recipe.cooking_minutes} min` : "Cuisson à préciser";
     const tags = (recipe.tags || []).slice(0, 3);
     const favoriteMark = recipe.is_favorite ? `<span class="meal-fav">${icon("star", "is-active")}</span>` : "";
-    const hue = swatchHue(recipe.title);
-    const swatchStyle = `--sw-h:${hue}`;
-    const swatch = recipe.image_status === "found" && recipe.image_url
+    const pal = categoryPalette(recipe.tags);
+    const swatchStyle = `--sw-from:${pal.from};--sw-to:${pal.to}`;
+    const hasPhoto = recipe.image_status === "found" && recipe.image_url;
+    const swatch = hasPhoto
       ? `<div class="meal-swatch meal-swatch-photo"><img src="${this._esc(recipe.image_url)}" alt="" loading="lazy"></div>`
       : `<div class="meal-swatch" style="${swatchStyle}">${icon(categoryIcon(recipe.tags))}</div>`;
-    return `<article class="meal" data-card-id="${this._esc(card.id)}">
+    return `<article class="meal ${hasPhoto ? "has-photo" : ""}" data-card-id="${this._esc(card.id)}">
       ${swatch}
       <div class="meal-row">
         <button class="grip" type="button" data-grip="${this._esc(card.id)}" aria-label="Déplacer ${this._esc(recipe.title)}" title="Maintenir puis déplacer">${icon("grip")}</button>
         <button class="meal-main" type="button" data-detail="${this._esc(card.id)}">
-          <strong>${favoriteMark}${this._esc(recipe.title)}</strong>
+          <strong class="at-dish-title">${favoriteMark}${this._esc(recipe.title)}</strong>
           <span class="meta">${this._esc(cooking)} · ${this._esc(card.servings || recipe.servings || 2)} pers.</span>
           ${tags.length ? `<span class="tags">${tags.map((tag) => `<i>${this._esc(tag)}</i>`).join("")}</span>` : ""}
         </button>
-        <button class="cook" type="button" data-cook="${this._esc(card.id)}" aria-label="Marquer comme cuisiné" title="Cuisiné">${icon("check")}</button>
-        <button class="meal-delete" type="button" data-delete-card="${this._esc(card.id)}" aria-label="Supprimer cette carte" title="Supprimer">${icon("trash")}</button>
+        <div class="meal-actions">
+          <button class="cook" type="button" data-cook="${this._esc(card.id)}" aria-label="Marquer comme cuisiné" title="Cuisiné">${icon("check")}</button>
+          <button class="meal-delete" type="button" data-delete-card="${this._esc(card.id)}" aria-label="Supprimer cette carte" title="Supprimer">${icon("trash")}</button>
+        </div>
       </div>
     </article>`;
   }
 
   _emptyHTML(text, iconName = "meal") {
     return `<div class="empty">${icon(iconName)}<span>${text}</span></div>`;
+  }
+
+  _todayHeroHTML() {
+    const key = todayKey();
+    const cards = this._cards(key);
+    const card = cards[0];
+    if (!card) {
+      return `<section class="hero hero-empty">
+        <h2 class="at-section-title">Aujourd'hui</h2>
+        <div class="hero-fallback">
+          <span>Rien de prévu pour aujourd'hui</span>
+          <button class="pill pill-ok hero-generate" type="button" data-hero-generate>${icon("sparkles")} Générer des idées</button>
+        </div>
+      </section>`;
+    }
+    const recipe = this._recipe(card);
+    const hasPhoto = recipe.image_status === "found" && recipe.image_url;
+    const pal = categoryPalette(recipe.tags);
+    const bgStyle = hasPhoto
+      ? `background-image:url('${this._esc(recipe.image_url)}')`
+      : `background-image:linear-gradient(150deg,${pal.from},${pal.to})`;
+    return `<section class="hero">
+      <h2 class="at-section-title">Aujourd'hui</h2>
+      <div class="hero-card" style="${bgStyle}">
+        <div class="hero-scrim">
+          <h3 class="at-dish-title">${this._esc(recipe.title)}</h3>
+          <div class="hero-actions">
+            <button class="pill pill-ok hero-cook" type="button" data-cook="${this._esc(card.id)}">${icon("check")} Cuisiné</button>
+            <button class="pill pill-neutral hero-detail" type="button" data-detail="${this._esc(card.id)}">${icon("eye")} Détail</button>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  _bindWeekDots(root) {
+    const scroller = root.querySelector(".week-scroll");
+    const dots = root.querySelectorAll(".week-dots .dot");
+    if (!scroller || !dots.length) return;
+    const days = root.querySelectorAll(".day");
+    const update = () => {
+      let closest = 0;
+      let best = Infinity;
+      days.forEach((day, i) => {
+        const d = Math.abs(day.offsetLeft - scroller.scrollLeft);
+        if (d < best) { best = d; closest = i; }
+      });
+      dots.forEach((dot, i) => dot.classList.toggle("is-active", i === closest));
+    };
+    scroller.addEventListener("scroll", update, { passive: true });
   }
 
   _dayHTML(key, label) {
@@ -323,15 +375,21 @@ class ATableCard extends HTMLElement {
     const error = this._data?.error;
 
     this.shadowRoot.innerHTML = `<style>
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&display=swap');
       :host{
         display:block;width:100%;
         font-family:var(--primary-font-family,system-ui,sans-serif);
         color:var(--primary-text-color,#f4f6fa);
         --at-space-1:4px; --at-space-2:8px; --at-space-3:12px; --at-space-4:16px; --at-space-5:24px;
-        --at-radius-sm:9px; --at-radius-md:13px; --at-radius-lg:19px;
+        --at-radius-sm:9px; --at-radius-md:13px; --at-radius-lg:19px; --at-radius-xl:22px;
         --at-border:color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);
-        --at-surface-1:color-mix(in srgb,var(--card-background-color,#171a20) 94%,var(--primary-text-color,#fff));
-        --at-surface-2:color-mix(in srgb,var(--card-background-color,#171a20) 88%,var(--primary-text-color,#fff));
+        --at-glass-1:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent);
+        --at-glass-2:color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);
+        --at-glass-3:color-mix(in srgb,var(--primary-text-color,#fff) 18%,transparent);
+        --at-surface-1:var(--at-glass-1);
+        --at-surface-2:var(--at-glass-2);
+        --at-font-display:"Fraunces",var(--primary-font-family,serif);
+        --at-accent-ok:#34d399; --at-accent-warn:#fbbf24; --at-accent-alert:#f87171; --at-accent-info:#38bdf8;
         --at-ease:cubic-bezier(.32,.72,.35,1);
         accent-color:var(--primary-color,#4f98a3);
       }
@@ -339,7 +397,10 @@ class ATableCard extends HTMLElement {
       @media (prefers-reduced-motion: reduce){
         *{transition-duration:.001ms !important;animation-duration:.001ms !important}
       }
-      .app{width:100%;background:var(--card-background-color,#171a20);border-radius:var(--at-radius-lg);padding:clamp(14px,2vw,24px);overflow:hidden}
+      .app{width:100%;background:color-mix(in srgb,var(--card-background-color,#171a20) 55%,transparent);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);border-radius:var(--at-radius-xl);padding:clamp(14px,2vw,24px);overflow:hidden}
+      .at-label{color:var(--secondary-text-color,#aeb7c5);font-size:12px;text-align:center;display:block}
+      .at-label::before{content:"- "}
+      .at-section-title{text-align:center;font-weight:800;letter-spacing:-.01em}
       .top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:var(--at-space-5)}
       .eyebrow{margin:0 0 4px;color:var(--secondary-text-color,#aeb7c5);font-size:12px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
       h1{margin:0;font-size:clamp(24px,2.5vw,31px);line-height:1.1;font-weight:800;letter-spacing:-.01em}
@@ -353,11 +414,23 @@ class ATableCard extends HTMLElement {
       :host(*) button:focus-visible,:host(*) input:focus-visible,:host(*) select:focus-visible,:host(*) textarea:focus-visible,:host(*) [tabindex]:focus-visible{
         outline:2px solid var(--primary-color,#4f98a3);outline-offset:2px;border-radius:6px;
       }
-      .icon-btn{width:44px;height:44px;border:0;border-radius:var(--at-radius-md);background:var(--at-surface-2);color:inherit;display:grid;place-items:center}
-      .icon-btn:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 16%,var(--at-surface-2))}
+      .icon-btn{width:44px;height:44px;border:0;border-radius:var(--at-radius-md);background:var(--at-glass-2);color:inherit;display:grid;place-items:center}
+      .icon-btn:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 16%,var(--at-glass-2))}
       .icon-btn.is-active,.icon-btn .icon-star.is-active{color:var(--primary-color,#4f98a3)}
       .fav-btn.is-active{color:#e3b341}
       .top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+      .pill{width:auto;height:auto;padding:9px 14px;border-radius:99px;display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;border:1px solid transparent}
+      .pill span{white-space:nowrap}
+      .pill .icon{width:16px;height:16px}
+      .pill-info{background:color-mix(in srgb,var(--at-accent-info) 16%,transparent);border-color:color-mix(in srgb,var(--at-accent-info) 40%,transparent);color:var(--at-accent-info)}
+      .pill-ok{background:color-mix(in srgb,var(--at-accent-ok) 16%,transparent);border-color:color-mix(in srgb,var(--at-accent-ok) 40%,transparent);color:var(--at-accent-ok)}
+      .pill-warn{background:color-mix(in srgb,var(--at-accent-warn) 16%,transparent);border-color:color-mix(in srgb,var(--at-accent-warn) 40%,transparent);color:var(--at-accent-warn)}
+      .pill-neutral{background:var(--at-glass-1);border-color:var(--at-border);color:var(--secondary-text-color,#aeb7c5)}
+      .pill:hover{filter:brightness(1.15)}
+      @media (max-width:680px){
+        .pill{padding:0;width:40px;height:40px;justify-content:center}
+        .pill span{display:none}
+      }
       .generator{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);margin-bottom:var(--at-space-4)}
       .generator strong{font-size:14px;font-weight:750}
       .generator-actions,.counter{display:flex;align-items:center;gap:8px}
@@ -369,7 +442,7 @@ class ATableCard extends HTMLElement {
       .generate .icon,.add .icon,.save .icon,.cancel .icon{width:15px;height:15px}
       .generate:hover,.add:hover,.save:hover{filter:brightness(1.08)}
       .save:disabled{opacity:.5;cursor:not-allowed;filter:none;box-shadow:none}
-      .temp-section{margin-bottom:var(--at-space-4);padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:color-mix(in srgb,var(--card-background-color,#171a20) 92%,var(--primary-text-color,#fff))}
+      .temp-section{margin-bottom:var(--at-space-4);padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-glass-1)}
       .temp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:14px;font-weight:750}
       .temp-list{display:flex;flex-wrap:wrap;gap:8px}
       .temp-ing{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 10px;border-radius:var(--at-radius-sm);background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent);font-size:12px}
@@ -378,14 +451,38 @@ class ATableCard extends HTMLElement {
       .temp-ing-edit:hover,.temp-ing-remove:hover{background:color-mix(in srgb,var(--primary-text-color,#fff) 12%,transparent);color:var(--primary-text-color,#f4f6fa)}
       .temp-ing-edit .icon,.temp-ing-remove .icon{width:14px;height:14px}
       .add-temp{margin-top:8px;font-size:12px;color:var(--primary-color,#4f98a3);background:none;border:0;padding:0;font-weight:700}
-      .backlog{padding:var(--at-space-3);border:1px solid var(--at-border);border-radius:var(--at-radius-md);margin-bottom:var(--at-space-4);background:color-mix(in srgb,var(--card-background-color,#171a20) 92%,var(--primary-text-color,#fff))}
+      .hero{margin-bottom:var(--at-space-4)}
+      .hero .at-section-title{margin:0 0 12px;font-size:16px}
+      .hero-card{position:relative;border-radius:var(--at-radius-xl);overflow:hidden;min-height:190px;background-size:cover;background-position:center;display:flex;align-items:flex-end;border:1px solid var(--at-border)}
+      .hero-scrim{width:100%;padding:18px;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,.1) 70%,transparent);color:#fff}
+      .hero-scrim h3{margin:0 0 12px;font-size:clamp(20px,2.4vw,28px);font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+      .hero-actions{display:flex;gap:10px;flex-wrap:wrap}
+      .hero-actions .pill{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+      .hero-empty .hero-fallback{display:flex;flex-direction:column;align-items:center;gap:12px;padding:26px;border-radius:var(--at-radius-xl);border:1px dashed var(--at-border);background:var(--at-glass-1);color:var(--secondary-text-color,#aeb7c5);text-align:center}
+      .backlog{padding:var(--at-space-3);border:1px solid var(--at-border);border-radius:var(--at-radius-md);margin-bottom:var(--at-space-4);background:var(--at-glass-1)}
       .section-head,.day header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:750;text-transform:uppercase;letter-spacing:.03em;color:var(--secondary-text-color,#aeb7c5)}
       .section-head b,.day header b{min-width:23px;padding:2px 7px;border-radius:99px;text-align:center;font-size:12px;color:var(--secondary-text-color,#aeb7c5);background:color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);text-transform:none;letter-spacing:normal}
       .backlog-scroll{overflow-x:auto;overflow-y:hidden;padding:10px 1px 4px;scroll-behavior:auto}
       .backlog-zone{display:flex;gap:10px;min-width:max-content;min-height:102px}
       .backlog-zone .meal{flex:0 0 250px;width:250px}
-      .week-scroll{width:100%;overflow-x:auto;overflow-y:hidden;padding:0 0 9px;scroll-behavior:auto;overscroll-behavior-x:contain}
-      .week{display:grid;grid-template-columns:repeat(7,230px);gap:10px;min-width:max-content}
+      .week-scroll{width:100%;overflow-x:auto;overflow-y:hidden;padding:0 0 9px;scroll-behavior:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory}
+      .week{display:grid;grid-auto-flow:column;grid-auto-columns:86%;gap:10px}
+      .day{scroll-snap-align:start}
+      .week-dots{display:flex;justify-content:center;gap:6px;margin-top:8px}
+      .week-dots .dot{width:7px;height:7px;border-radius:99px;background:var(--at-glass-3);transition:background-color 150ms var(--at-ease),transform 150ms var(--at-ease)}
+      .week-dots .dot.is-active{background:var(--primary-color,#4f98a3);transform:scale(1.3)}
+      @media (min-width:680px) and (max-width:960px){
+        .week-scroll{overflow:visible;scroll-snap-type:none}
+        .week{grid-auto-flow:row;grid-template-columns:repeat(2,1fr)}
+        .day{scroll-snap-align:none}
+        .week-dots{display:none}
+      }
+      @media (min-width:961px){
+        .week-scroll{overflow:visible;scroll-snap-type:none}
+        .week{grid-auto-flow:row;grid-template-columns:repeat(7,minmax(0,1fr))}
+        .day{scroll-snap-align:none}
+        .week-dots{display:none}
+      }
       .day{min-height:280px;padding:10px;border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);transition:border-color 150ms var(--at-ease)}
       .day.is-today{border-color:color-mix(in srgb,var(--primary-color,#4f98a3) 55%,var(--at-border))}
       .day.is-today header{color:var(--primary-color,#4f98a3)}
@@ -394,35 +491,41 @@ class ATableCard extends HTMLElement {
       .zone.over,.backlog-zone.over{outline:2px dashed var(--primary-color,#4f98a3);outline-offset:2px;background:color-mix(in srgb,var(--primary-color,#4f98a3) 7%,transparent)}
       .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:22px 8px;color:var(--secondary-text-color,#aeb7c5);font-size:12px;text-align:center}
       .empty .icon{width:34px;height:auto;opacity:.4}
-      .meal{display:grid;gap:0;border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-2);box-shadow:0 1px 2px rgba(0,0,0,.06);overflow:hidden;transition:transform 160ms var(--at-ease),box-shadow 160ms var(--at-ease),opacity 160ms var(--at-ease)}
+      .meal{position:relative;height:172px;min-height:0;flex:0 0 172px;border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-glass-2);box-shadow:0 1px 2px rgba(0,0,0,.06);overflow:hidden;transition:transform 160ms var(--at-ease),box-shadow 160ms var(--at-ease),opacity 160ms var(--at-ease)}
       .meal:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,0,0,.16)}
       .meal.dragging{opacity:.35}
-      .meal-swatch{height:30px;display:flex;align-items:center;justify-content:flex-end;padding:0 8px;background:linear-gradient(120deg,hsl(var(--sw-h) 55% 42%),hsl(calc(var(--sw-h) + 35) 60% 32%));color:rgba(255,255,255,.85)}
-      .meal-swatch-photo{height:64px;padding:0;overflow:hidden}
+      .meal-swatch{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:flex-end;padding:8px;background:linear-gradient(150deg,var(--sw-from,#93764f),var(--sw-to,#5b452c));color:rgba(255,255,255,.85)}
+      .meal-swatch-photo{padding:0;overflow:hidden}
       .meal-swatch-photo img{width:100%;height:100%;object-fit:cover;display:block}
-      .meal-swatch .icon{width:15px;height:15px}
-      .meal-row{display:grid;grid-template-columns:27px minmax(0,1fr) 31px 31px;align-items:start;gap:7px;padding:9px}
+      .meal-swatch .icon{width:20px;height:20px;opacity:.85}
+      .meal-row{position:absolute;left:0;right:0;bottom:0;z-index:1;display:grid;grid-template-columns:20px minmax(0,1fr);align-items:end;gap:5px;padding:7px 8px 8px;background:linear-gradient(to top,rgba(0,0,0,.8) 0%,rgba(0,0,0,.55) 60%,rgba(0,0,0,0) 100%);color:#fff}
       .meal-fav{display:inline-flex;vertical-align:-2px;margin-right:4px;color:#e3b341}
       .meal-fav .icon{width:13px;height:13px}
-      .grip{width:27px;height:31px;border:0;background:transparent;color:var(--secondary-text-color,#aeb7c5);line-height:1;touch-action:none;display:grid;place-items:center;cursor:grab}
-      .grip:hover{color:var(--primary-text-color,#f4f6fa)}
+      .grip{width:20px;height:22px;border:0;background:transparent;color:rgba(255,255,255,.8);line-height:1;touch-action:none;display:grid;place-items:center;cursor:grab}
+      .grip .icon{width:14px;height:14px}
+      .grip:hover{color:#fff}
       .meal-main{min-width:0;padding:0;border:0;text-align:left;background:transparent;color:inherit;display:grid;gap:4px}
-      .meal-main strong{display:block;font-size:14px;line-height:1.3;font-weight:700}
-      .meta{display:block;color:var(--secondary-text-color,#aeb7c5);font-size:11px}
-      .tags{display:flex;flex-wrap:wrap;gap:4px}
-      .tags i{padding:2px 6px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color,#fff) 9%,transparent);color:var(--secondary-text-color,#aeb7c5);font-size:10px;font-style:normal}
-      .cook{width:31px;height:31px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:transparent;color:var(--primary-color,#4f98a3);display:grid;place-items:center}
-      .cook:hover{background:color-mix(in srgb,var(--primary-color,#4f98a3) 14%,transparent);border-color:var(--primary-color,#4f98a3)}
-      .meal-delete{width:31px;height:31px;border:1px solid var(--at-border);border-radius:var(--at-radius-sm);background:transparent;color:var(--secondary-text-color,#aeb7c5);display:grid;place-items:center}
-      .meal-delete:hover{background:color-mix(in srgb,#c94c4c 14%,transparent);border-color:#c94c4c;color:#c94c4c}
-      .meal-delete .icon{width:15px;height:15px}
+      .meal-main strong{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:1.25;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.5)}
+      .meta{display:block;color:rgba(255,255,255,.82);font-size:11px}
+      .tags{display:flex;flex-wrap:wrap;gap:4px;overflow:hidden;max-height:19px}
+      .tags i{padding:2px 6px;border-radius:99px;background:rgba(255,255,255,.16);color:#fff;font-size:10px;font-style:normal}
+      .meal .tags{display:none}
+      .meal-actions{position:absolute;top:8px;right:8px;z-index:2;display:flex;gap:6px}
+      .cook{width:29px;height:29px;border:1px solid rgba(255,255,255,.35);border-radius:99px;background:rgba(20,24,32,.45);backdrop-filter:blur(6px);color:var(--at-accent-ok);display:grid;place-items:center}
+      .cook:hover{background:color-mix(in srgb,var(--at-accent-ok) 25%,rgba(20,24,32,.45));border-color:var(--at-accent-ok)}
+      .meal-delete{width:29px;height:29px;border:1px solid rgba(255,255,255,.35);border-radius:99px;background:rgba(20,24,32,.45);backdrop-filter:blur(6px);color:rgba(255,255,255,.85);display:grid;place-items:center}
+      .meal-delete:hover{background:color-mix(in srgb,var(--at-accent-alert) 30%,rgba(20,24,32,.45));border-color:var(--at-accent-alert);color:var(--at-accent-alert)}
+      .meal-delete .icon{width:14px;height:14px}
+      .backlog-zone .meal{aspect-ratio:auto;height:170px}
       .skeleton-wrap{display:grid;gap:12px}
       .skeleton{border-radius:var(--at-radius-md);background:linear-gradient(100deg,var(--at-surface-1) 30%,var(--at-surface-2) 50%,var(--at-surface-1) 70%);background-size:200% 100%;animation:at-shimmer 1.4s ease-in-out infinite}
       .skeleton-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
       @keyframes at-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
       .add-row{display:flex;justify-content:flex-end;margin-top:var(--at-space-4)}
       .overlay{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.48);animation:at-fade 180ms var(--at-ease)}
-      .dialog{width:min(720px,100%);max-height:calc(100dvh - 32px);overflow:auto;border:1px solid var(--at-border);border-radius:var(--at-radius-lg);padding:20px;background:var(--card-background-color,#171a20);box-shadow:0 22px 56px rgba(0,0,0,.38);animation:at-pop 200ms var(--at-ease)}
+      .dialog{width:min(720px,100%);max-height:calc(100dvh - 32px);overflow:auto;border:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 14%,transparent);border-radius:var(--at-radius-xl);padding:20px;background:color-mix(in srgb,var(--card-background-color,#171a20) 85%,transparent);backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);box-shadow:0 22px 56px rgba(0,0,0,.38);animation:at-pop 200ms var(--at-ease)}
+      .dialog h2{text-align:center;font-weight:800;letter-spacing:-.01em}
+      .at-dish-title{font-family:var(--at-font-display);font-weight:600}
       .dialog-sm{width:min(420px,100%)}
       .dialog-lg{width:min(900px,100%)}
       @keyframes at-fade{from{opacity:0}to{opacity:1}}
@@ -501,8 +604,9 @@ class ATableCard extends HTMLElement {
       .nutrition-item{padding:6px;border-radius:8px;background:color-mix(in srgb,var(--primary-text-color,#fff) 8%,transparent);text-align:center}
       .nutrition-item b{display:block;font-size:12px;color:var(--primary-text-color,#f4f6fa)}
       .nutrition-item span{font-size:10px;color:var(--secondary-text-color,#aeb7c5)}
-      .settings-section{margin-top:var(--at-space-4);border-top:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);padding-top:14px}
-      .settings-section h3{margin:0 0 10px;font-size:14px;font-weight:800;color:var(--primary-text-color,#f4f6fa);letter-spacing:-.01em}
+      .settings-section{margin-top:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-lg);padding:18px;background:var(--at-glass-1)}
+      .settings-section h3{margin:0 0 4px;font-size:15px;font-weight:800;color:var(--primary-text-color,#f4f6fa);letter-spacing:-.01em;text-align:center}
+      .settings-section .at-label{margin-bottom:10px}
       .checkbox-group,.chip-group{display:flex;flex-wrap:wrap;gap:8px}
       .checkbox-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color,#aeb7c5);transition:opacity 150ms var(--at-ease)}
       .checkbox-item.disabled{opacity:.4}
@@ -514,9 +618,16 @@ class ATableCard extends HTMLElement {
       .row{display:flex;gap:10px;align-items:center}
       .row > *{flex:1}
       .tabs{display:flex;gap:6px;margin-bottom:var(--at-space-4);border-bottom:1px solid color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent);padding-bottom:8px;flex-wrap:wrap}
-      .tab{padding:7px 11px;border-radius:99px;background:transparent;border:0;color:var(--secondary-text-color,#aeb7c5);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+      .tab{padding:7px 11px;border-radius:99px;background:transparent;border:0;color:var(--secondary-text-color,#aeb7c5);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left}
       .tab:hover{background:color-mix(in srgb,var(--primary-text-color,#fff) 7%,transparent)}
       .tab.active{background:var(--primary-color,#4f98a3);color:var(--text-primary-color,#fff)}
+      @media (min-width:680px){
+        #settings-form{display:grid;grid-template-columns:180px 1fr;gap:20px;align-items:start}
+        #settings-form .dialog-top{grid-column:1/-1}
+        #settings-form .tabs{grid-column:1;flex-direction:column;border-bottom:0;border-right:1px solid var(--at-border);padding:0 12px 0 0;gap:2px;align-self:start;position:sticky;top:0}
+        #settings-form .tab{width:100%}
+        #settings-form .tab-content{grid-column:2}
+      }
       .tab-content{display:none;animation:at-fade 160ms var(--at-ease)}
       .tab-content.active{display:block}
       .readonly-input{pointer-events:none;opacity:0.7}
@@ -597,7 +708,6 @@ class ATableCard extends HTMLElement {
         .app{padding:14px;border-radius:14px}
         .generator{flex-wrap:wrap}
         .generator-actions{width:100%;justify-content:space-between}
-        .week{grid-template-columns:repeat(7,255px)}
         .day{min-height:305px}
         .zone{min-height:230px}
         .backlog-zone .meal{flex-basis:260px;width:260px}
@@ -610,12 +720,12 @@ class ATableCard extends HTMLElement {
           <h1>À table</h1>
         </div>
         <div class="top-actions">
-          <button class="icon-btn" type="button" data-open-shopping aria-label="Liste de courses" title="Liste de courses">${icon("basket")}</button>
-          <button class="icon-btn" type="button" data-open-library aria-label="Mes recettes" title="Mes recettes">${icon("library")}</button>
-          <button class="icon-btn" type="button" data-open-history aria-label="Historique" title="Historique">${icon("history")}</button>
-          <button class="icon-btn" type="button" data-open-guest aria-label="Repas spécial" title="Repas spécial">${icon("glass")}</button>
-          <button class="icon-btn settings" type="button" aria-label="Paramètres" title="Paramètres">${icon("settings")}</button>
-          <button class="icon-btn refresh" type="button" aria-label="Actualiser" title="Actualiser">${icon("refresh")}</button>
+          <button class="icon-btn pill pill-info" type="button" data-open-shopping aria-label="Liste de courses" title="Liste de courses">${icon("basket")}<span>Courses</span></button>
+          <button class="icon-btn pill pill-ok" type="button" data-open-library aria-label="Mes recettes" title="Mes recettes">${icon("library")}<span>Mes recettes</span></button>
+          <button class="icon-btn pill pill-neutral" type="button" data-open-history aria-label="Historique" title="Historique">${icon("history")}<span>Historique</span></button>
+          <button class="icon-btn pill pill-warn" type="button" data-open-guest aria-label="Repas spécial" title="Repas spécial">${icon("glass")}<span>Repas spécial</span></button>
+          <button class="icon-btn pill pill-neutral settings" type="button" aria-label="Paramètres" title="Paramètres">${icon("settings")}<span>Paramètres</span></button>
+          <button class="icon-btn pill pill-neutral refresh" type="button" aria-label="Actualiser" title="Actualiser">${icon("refresh")}<span>Actualiser</span></button>
         </div>
       </header>
       ${this._loading
@@ -623,6 +733,7 @@ class ATableCard extends HTMLElement {
         : error
           ? `<p class="state error">${this._esc(error)}</p>`
           : `
+            ${this._todayHeroHTML()}
             <section class="temp-section">
               <header class="temp-head">
                 <span>Aliments à utiliser rapidement</span>
@@ -659,6 +770,9 @@ class ATableCard extends HTMLElement {
                 ${ATABLE_DAYS.map(([key, label]) => this._dayHTML(key, label)).join("")}
               </section>
             </div>
+            <div class="week-dots">
+              ${ATABLE_DAYS.map((_, i) => `<i class="dot ${i === 0 ? "is-active" : ""}"></i>`).join("")}
+            </div>
             <div class="add-row">
               <button class="add" type="button">＋ Ajouter une recette</button>
             </div>
@@ -681,6 +795,8 @@ class ATableCard extends HTMLElement {
     root.querySelector("[data-open-guest]")?.addEventListener("click", () => this._openGuest());
     root.querySelector(".add")?.addEventListener("click", () => this._openAdd());
     root.querySelector(".generate")?.addEventListener("click", () => this._generate());
+    root.querySelector("[data-hero-generate]")?.addEventListener("click", () => this._generate());
+    this._bindWeekDots(root);
     root.querySelectorAll("[data-count]").forEach((button) =>
       button.addEventListener("click", () => {
         const current = Number(this._data.preferences?.default_recipe_count || 6);
@@ -1189,7 +1305,7 @@ class ATableCard extends HTMLElement {
         : "";
       overlay.innerHTML = `<section class="dialog">
         <header class="dialog-top">
-          <h2>${this._esc(recipe.title)}</h2>
+          <h2 class="at-dish-title">${this._esc(recipe.title)}</h2>
           <div class="dialog-top-actions">
             <button class="icon-btn" type="button" data-fetch-image="${this._esc(card.recipe_id)}" aria-label="Illustrer" title="Chercher une image">${icon("eye")}</button>
             <button class="icon-btn fav-btn ${recipe.is_favorite ? "is-active" : ""}" type="button" data-toggle-favorite="${this._esc(card.recipe_id)}" aria-label="Basculer favori" title="Favori">${icon("star", recipe.is_favorite ? "is-active" : "")}</button>
