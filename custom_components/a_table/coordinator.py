@@ -272,6 +272,15 @@ class ATableCoordinator:
             logger.error(f"Erreur de parsing JSON : {e}")
             proposals = []
 
+        pexels_key = prefs.get("pexels_api_key")
+        if pexels_key:
+            for proposal in proposals:
+                try:
+                    proposal["image_url"] = await self._pexels_search_image(proposal.get("title", ""), pexels_key)
+                    proposal["image_status"] = "found"
+                except Exception as e:
+                    logger.debug(f"Illustration ignorée pour '{proposal.get('title', '')}' : {e}")
+
         draft_id = f"draft_{datetime.now().strftime('%Y-%m-%d_%H-%M')}_{uuid4().hex[:8]}"
         draft = {
             "created_at": dt_util.now().isoformat(),
@@ -982,20 +991,11 @@ class ATableCoordinator:
             history.append(entry)
         await self.store.async_save()
 
-    async def async_fetch_recipe_image(self, recipe_id: str) -> dict[str, Any]:
-        """Cherche une illustration pour une recette via l'API Pexels."""
-        recipe = self.store.data["recipes"].get(recipe_id)
-        if recipe is None:
-            raise ValueError("Recette introuvable")
-
-        prefs = self.store.data.get("preferences", {})
-        api_key = prefs.get("pexels_api_key")
-        if not api_key:
-            raise ValueError("Configure ta clé Pexels dans Paramètres → Intégrations.")
-
+    async def _pexels_search_image(self, title: str, api_key: str) -> str:
+        """Cherche une image via l'API Pexels et retourne son URL, ou lève ValueError."""
         session = async_get_clientsession(self.hass)
         params = {
-            "query": recipe.get("title", ""),
+            "query": title,
             "per_page": 1,
             "orientation": "landscape",
         }
@@ -1019,7 +1019,20 @@ class ATableCoordinator:
         if not photos or not photos[0].get("src", {}).get("large"):
             raise ValueError("Aucune image trouvée pour ce plat.")
 
-        recipe["image_url"] = photos[0]["src"]["large"]
+        return photos[0]["src"]["large"]
+
+    async def async_fetch_recipe_image(self, recipe_id: str) -> dict[str, Any]:
+        """Cherche une illustration pour une recette via l'API Pexels."""
+        recipe = self.store.data["recipes"].get(recipe_id)
+        if recipe is None:
+            raise ValueError("Recette introuvable")
+
+        prefs = self.store.data.get("preferences", {})
+        api_key = prefs.get("pexels_api_key")
+        if not api_key:
+            raise ValueError("Configure ta clé Pexels dans Paramètres → Intégrations.")
+
+        recipe["image_url"] = await self._pexels_search_image(recipe.get("title", ""), api_key)
         recipe["image_status"] = "found"
         recipe["updated_at"] = dt_util.now().isoformat()
         await self.store.async_save()
@@ -1218,18 +1231,34 @@ class ATableCoordinator:
             f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}}}'
         )
 
+    WINE_INSTRUCTION = (
+        "Propose 2 à 4 suggestions d'accord mets-vins sous forme d'appellations ou dénominations "
+        "réelles et courantes (AOC/AOP, ex. \"Côtes du Rhône rouge\", \"Chablis\", \"Beaujolais-"
+        "Villages\", \"Sancerre blanc\") avec une courte justification liée au menu. En plus de "
+        "l'appellation, si tu es raisonnablement confiant qu'il s'agit d'une grande maison largement "
+        "distribuée en grande surface (ex. \"Guigal\", \"Georges Duboeuf\"), tu peux citer 1 à 2 "
+        "maisons dans le champ \"producers\" — jamais un domaine confidentiel ou incertain, liste "
+        "vide si aucune ne te vient naturellement avec confiance."
+    )
+    WINE_RESULT_SKELETON = '{"wine_pairings": [{"style": "...", "description": "...", "producers": []}]}'
+
     async def async_generate_guest_menu(
         self,
         guests: int,
         notes: str = "",
         course_keys: list[str] | None = None,
         composed_keys: list[str] | None = None,
+        composed_counts: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         """Génère un menu invité complet + accords mets-vins, en un seul appel IA."""
         selected = [k for k in (course_keys or list(self.GUEST_COURSE_KEYS)) if k in self.GUEST_COURSE_KEYS]
         if not selected:
             raise ValueError("Choisis au moins un service pour le menu.")
         composed = set(composed_keys or []) & set(selected)
+        counts = {
+            k: max(2, min(6, int((composed_counts or {}).get(k, 3))))
+            for k in composed
+        }
 
         prefs = self.store.data.get("preferences", {})
         temp_ings = self.store.data.get("temporary_ingredients", [])
@@ -1238,10 +1267,13 @@ class ATableCoordinator:
         course_labels = ", ".join(self.GUEST_COURSE_LABELS[k].lower() for k in selected)
         composed_note = ""
         if composed:
-            composed_labels = ", ".join(self.GUEST_COURSE_LABELS[k].lower() for k in composed)
+            composed_parts = ", ".join(
+                f"{self.GUEST_COURSE_LABELS[k].lower()} ({counts[k]} variantes)" for k in composed
+            )
             composed_note = (
-                f" Pour {composed_labels}, propose un assortiment de 2 à 4 variantes distinctes "
-                "(champ \"items\", une entrée par variante) plutôt qu'un plat unique."
+                f" Pour {composed_parts}, propose un assortiment de variantes distinctes "
+                "(champ \"items\", exactement le nombre de variantes indiqué, une entrée par "
+                "variante) plutôt qu'un plat unique."
             )
         json_skeleton = ",\n".join(self._guest_course_json_skeleton(k, k in composed) for k in selected)
 
@@ -1254,18 +1286,14 @@ class ATableCoordinator:
             f"Compose les services suivants, cohérents entre eux (pas de répétition d'ingrédients "
             f"ou de techniques d'un plat à l'autre) : {course_labels}. Adapte-toi aux régimes/"
             "allergies du foyer, en utilisant en priorité les aliments déjà disponibles si "
-            f"pertinent.{composed_note} Propose aussi 2 à 4 suggestions d'accord mets-vins sous "
-            "forme d'appellations ou dénominations réelles et courantes (AOC/AOP, ex. \"Côtes du "
-            "Rhône rouge\", \"Chablis\", \"Beaujolais-Villages\", \"Sancerre blanc\") avec une "
-            "courte justification liée au menu — jamais un nom de marque, de domaine ou de "
-            "producteur précis, car cela ne peut pas être vérifié.\n\n"
+            f"pertinent.{composed_note} {self.WINE_INSTRUCTION}\n\n"
             "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
             "exactement au format :\n"
             "{\n"
             '  "courses": {\n'
             f"{json_skeleton}\n"
             "  },\n"
-            '  "wine_pairings": [{"style": "...", "description": "..."}]\n'
+            '  "wine_pairings": [{"style": "...", "description": "...", "producers": []}]\n'
             "}"
         )
 
@@ -1305,6 +1333,7 @@ class ATableCoordinator:
             "notes": notes,
             "course_keys": selected,
             "composed_keys": list(composed),
+            "composed_counts": counts,
             "courses": {key: courses.get(key, {}) for key in selected},
             "wine_pairings": [p for p in (parsed.get("wine_pairings") or []) if isinstance(p, dict)],
         }
@@ -1320,13 +1349,23 @@ class ATableCoordinator:
             raise ValueError("Menu invité introuvable")
         return menu
 
-    async def async_regenerate_guest_course(self, menu_id: str, course_key: str) -> dict[str, Any]:
-        """Régénère un seul plat d'un menu invité, en gardant les autres plats et les accords vins."""
+    async def async_regenerate_guest_course(
+        self, menu_id: str, course_key: str, item_index: int | None = None
+    ) -> dict[str, Any]:
+        """Régénère un plat (ou une seule variante d'un assortiment) d'un menu invité."""
         menu = self._get_guest_menu(menu_id)
         course_keys = menu.get("course_keys") or list(self.GUEST_COURSE_KEYS)
         if course_key not in course_keys:
             raise ValueError("Type de plat invalide")
         is_composed = course_key in (menu.get("composed_keys") or [])
+        target_item = None
+        if item_index is not None:
+            if not is_composed:
+                raise ValueError("Ce service n'est pas un assortiment.")
+            items = menu["courses"].get(course_key, {}).get("items", [])
+            if item_index < 0 or item_index >= len(items):
+                raise ValueError("Variante introuvable.")
+            target_item = items[item_index]
 
         prefs = self.store.data.get("preferences", {})
         temp_ings = self.store.data.get("temporary_ingredients", [])
@@ -1338,31 +1377,49 @@ class ATableCoordinator:
             if k != course_key and menu["courses"].get(k)
         ]
 
-        composed_note = (
-            " Réponds avec un assortiment de 2 à 4 variantes distinctes (champ \"items\") plutôt "
-            "qu'un plat unique."
-            if is_composed
-            else ""
-        )
-        result_skeleton = (
-            self._guest_course_json_skeleton(course_key, True).split(": ", 1)[1]
-            if is_composed
-            else (
-                '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], '
-                f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}}}'
+        if target_item is not None:
+            items = menu["courses"][course_key].get("items", [])
+            other_items = [f"- {it.get('title', '')}" for i, it in enumerate(items) if i != item_index]
+            instructions = (
+                f"Tu composes UNE variante d'un assortiment ({self.GUEST_COURSE_LABELS[course_key].lower()}) "
+                f"d'un repas invités pour {menu.get('guests', 2)} convives. Les autres variantes déjà "
+                "choisies dans ce même assortiment sont :\n"
+                + ("\n".join(other_items) if other_items else "aucune autre variante")
+                + "\nLes autres plats déjà choisis pour ce repas sont :\n"
+                + ("\n".join(other_courses) if other_courses else "aucun autre plat encore choisi")
+                + f"\n\nCONTEXTE :\n{context}\n\n{RECIPE_QUALITY_GUIDELINES}\n\n"
+                "Propose une idée différente de la précédente pour cette seule variante, cohérente "
+                "avec les autres variantes et les autres plats du menu (pas de répétition "
+                "d'ingrédients/techniques).\n\n"
+                "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
+                'exactement au format : {"title": "...", "ingredients": [{"name": "...", "quantity": 1, '
+                f'"unit": "..."}}], "steps": ["..."], "nutrition": {self._NUTRITION_SKELETON}}}'
             )
-        )
-
-        instructions = (
-            f"Tu composes le {self.GUEST_COURSE_LABELS[course_key].lower()} d'un repas invités pour "
-            f"{menu.get('guests', 2)} convives. Les autres plats déjà choisis pour ce repas sont :\n"
-            + ("\n".join(other_courses) if other_courses else "aucun autre plat encore choisi")
-            + f"\n\nCONTEXTE :\n{context}\n\n{RECIPE_QUALITY_GUIDELINES}\n\n"
-            "Propose une idée différente de la précédente pour ce plat, cohérente avec les autres "
-            f"plats du menu (pas de répétition d'ingrédients/techniques).{composed_note}\n\n"
-            "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
-            f"exactement au format :\n{result_skeleton}"
-        )
+        else:
+            composed_note = (
+                f" Réponds avec un assortiment de {menu.get('composed_counts', {}).get(course_key, 3)} "
+                "variantes distinctes (champ \"items\") plutôt qu'un plat unique."
+                if is_composed
+                else ""
+            )
+            result_skeleton = (
+                self._guest_course_json_skeleton(course_key, True).split(": ", 1)[1]
+                if is_composed
+                else (
+                    '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], '
+                    f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}}}'
+                )
+            )
+            instructions = (
+                f"Tu composes le {self.GUEST_COURSE_LABELS[course_key].lower()} d'un repas invités pour "
+                f"{menu.get('guests', 2)} convives. Les autres plats déjà choisis pour ce repas sont :\n"
+                + ("\n".join(other_courses) if other_courses else "aucun autre plat encore choisi")
+                + f"\n\nCONTEXTE :\n{context}\n\n{RECIPE_QUALITY_GUIDELINES}\n\n"
+                "Propose une idée différente de la précédente pour ce plat, cohérente avec les autres "
+                f"plats du menu (pas de répétition d'ingrédients/techniques).{composed_note}\n\n"
+                "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
+                f"exactement au format :\n{result_skeleton}"
+            )
 
         response = await self.hass.services.async_call(
             "ai_task",
@@ -1382,29 +1439,43 @@ class ATableCoordinator:
             response_text = json_match.group(0)
 
         try:
-            new_course = json.loads(response_text)
-            if not isinstance(new_course, dict) or not new_course.get("title"):
+            new_value = json.loads(response_text)
+            if not isinstance(new_value, dict) or not new_value.get("title"):
                 raise ValueError("Réponse IA invalide")
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (plat du menu invité) : {e}")
             raise ValueError("L'IA n'a pas pu générer de remplacement. Réessaie.") from e
 
-        menu["courses"][course_key] = new_course
+        if target_item is not None:
+            menu["courses"][course_key]["items"][item_index] = new_value
+        else:
+            menu["courses"][course_key] = new_value
         await self.store.async_save()
 
         return menu
 
-    async def async_refine_guest_course(self, menu_id: str, course_key: str, message: str) -> dict[str, Any]:
-        """Ajuste un plat d'un menu invité via une consigne libre, en dialogue avec l'IA."""
+    async def async_refine_guest_course(
+        self, menu_id: str, course_key: str, message: str, item_index: int | None = None
+    ) -> dict[str, Any]:
+        """Ajuste un plat (ou une variante d'un assortiment) via une consigne libre, en dialogue avec l'IA."""
         menu = self._get_guest_menu(menu_id)
-        if course_key not in self.GUEST_COURSE_KEYS:
+        if course_key not in (menu.get("course_keys") or self.GUEST_COURSE_KEYS):
             raise ValueError("Type de plat invalide")
 
         prefs = self.store.data.get("preferences", {})
-        instructions = self._build_refine_instructions(menu["courses"].get(course_key, {}), message)
-        parsed = await self._call_refine_ai(prefs, "Ajustement d'un plat du menu invité", instructions)
 
-        menu["courses"][course_key] = {**menu["courses"].get(course_key, {}), **parsed}
+        if item_index is not None:
+            items = menu["courses"].get(course_key, {}).get("items", [])
+            if item_index < 0 or item_index >= len(items):
+                raise ValueError("Variante introuvable.")
+            instructions = self._build_refine_instructions(items[item_index], message)
+            parsed = await self._call_refine_ai(prefs, "Ajustement d'une variante du menu invité", instructions)
+            items[item_index] = {**items[item_index], **parsed}
+        else:
+            instructions = self._build_refine_instructions(menu["courses"].get(course_key, {}), message)
+            parsed = await self._call_refine_ai(prefs, "Ajustement d'un plat du menu invité", instructions)
+            menu["courses"][course_key] = {**menu["courses"].get(course_key, {}), **parsed}
+
         await self.store.async_save()
 
         return menu
@@ -1422,12 +1493,9 @@ class ATableCoordinator:
 
         instructions = (
             "Voici le menu d'un repas invités :\n" + "\n".join(course_lines) + "\n\n"
-            "Propose 2 à 4 suggestions d'accord mets-vins sous forme d'appellations ou dénominations "
-            "réelles et courantes (AOC/AOP, ex. \"Côtes du Rhône rouge\", \"Chablis\", \"Beaujolais-"
-            "Villages\"), jamais de marque, domaine ou producteur précis, avec une courte "
-            "justification liée au menu.\n\n"
+            f"{self.WINE_INSTRUCTION}\n\n"
             "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
-            'exactement au format : {"wine_pairings": [{"style": "...", "description": "..."}]}'
+            f"exactement au format : {self.WINE_RESULT_SKELETON}"
         )
 
         response = await self.hass.services.async_call(

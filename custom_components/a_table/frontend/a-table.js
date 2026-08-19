@@ -63,19 +63,9 @@ const OBJECTIVE_OPTIONS = [
   { value: "reduce_ultra_processed", label: "Réduire les aliments ultra-transformés" },
 ];
 
-const GROCERY_STORE_SEARCH_URLS = [
-  [/delhaize/i, (q) => `https://www.delhaize.be/fr/search?q=${q}`],
-  [/colruyt/i, (q) => `https://www.colruyt.be/fr/rechercher?q=${q}`],
-  [/carrefour/i, (q) => `https://www.carrefour.be/fr/search?q=${q}`],
-  [/cora/i, (q) => `https://www.cora.be/fr/search?text=${q}`],
-  [/intermarch/i, (q) => `https://www.intermarche.com/recherche?q=${q}`],
-  [/aldi/i, (q) => `https://www.aldi.be/fr/recherche.html?query=${q}`],
-  [/lidl/i, (q) => `https://www.lidl.be/q/search?q=${q}`],
-];
-
-function grocerySearchUrl(query, groceryStore) {
-  const match = GROCERY_STORE_SEARCH_URLS.find(([pattern]) => pattern.test(groceryStore || ""));
-  return match ? match[1](query) : `https://www.google.com/search?tbm=shop&q=${query}`;
+function wineSearchUrl(style, producers, groceryStore) {
+  const query = encodeURIComponent(`${style || ""} ${(producers || []).join(" ")} ${groceryStore || ""}`.trim());
+  return `https://www.google.com/search?q=${query}`;
 }
 
 const ATABLE_GUEST_COURSES = [
@@ -273,8 +263,11 @@ class ATableCard extends HTMLElement {
     const favoriteMark = recipe.is_favorite ? `<span class="meal-fav">${icon("star", "is-active")}</span>` : "";
     const hue = swatchHue(recipe.title);
     const swatchStyle = `--sw-h:${hue}`;
+    const swatch = recipe.image_status === "found" && recipe.image_url
+      ? `<div class="meal-swatch meal-swatch-photo"><img src="${this._esc(recipe.image_url)}" alt="" loading="lazy"></div>`
+      : `<div class="meal-swatch" style="${swatchStyle}">${icon(categoryIcon(recipe.tags))}</div>`;
     return `<article class="meal" data-card-id="${this._esc(card.id)}">
-      <div class="meal-swatch" style="${swatchStyle}">${icon(categoryIcon(recipe.tags))}</div>
+      ${swatch}
       <div class="meal-row">
         <button class="grip" type="button" data-grip="${this._esc(card.id)}" aria-label="Déplacer ${this._esc(recipe.title)}" title="Maintenir puis déplacer">${icon("grip")}</button>
         <button class="meal-main" type="button" data-detail="${this._esc(card.id)}">
@@ -405,6 +398,8 @@ class ATableCard extends HTMLElement {
       .meal:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,0,0,.16)}
       .meal.dragging{opacity:.35}
       .meal-swatch{height:30px;display:flex;align-items:center;justify-content:flex-end;padding:0 8px;background:linear-gradient(120deg,hsl(var(--sw-h) 55% 42%),hsl(calc(var(--sw-h) + 35) 60% 32%));color:rgba(255,255,255,.85)}
+      .meal-swatch-photo{height:64px;padding:0;overflow:hidden}
+      .meal-swatch-photo img{width:100%;height:100%;object-fit:cover;display:block}
       .meal-swatch .icon{width:15px;height:15px}
       .meal-row{display:grid;grid-template-columns:27px minmax(0,1fr) 31px 31px;align-items:start;gap:7px;padding:9px}
       .meal-fav{display:inline-flex;vertical-align:-2px;margin-right:4px;color:#e3b341}
@@ -483,12 +478,16 @@ class ATableCard extends HTMLElement {
       .refine-send{display:inline-flex;align-items:center;gap:6px;align-self:flex-end;background:none;border:1px solid var(--divider-color,rgba(255,255,255,.15));border-radius:8px;padding:6px 12px;color:inherit;cursor:pointer}
       .refine-send .icon{width:15px;height:15px}
       .wine-pairing{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--secondary-background-color,rgba(255,255,255,.04))}
+      .wine-producers{font-size:11px;font-style:italic;color:var(--secondary-text-color,#aeb7c5)}
       .wine-search-link{color:var(--primary-color,#4f98a3);font-size:12px;margin-top:4px;text-decoration:none}
       .wine-search-link:hover{text-decoration:underline}
       .recipe-image{margin:10px 0;border-radius:var(--at-radius-sm);overflow:hidden}
       .recipe-image img{width:100%;max-height:260px;object-fit:cover;display:block}
+      .proposal-image{margin:-1px -1px 10px;border-radius:var(--at-radius-md) var(--at-radius-md) 0 0;overflow:hidden}
+      .proposal-image img{width:100%;height:120px;object-fit:cover;display:block}
       .step-timer-btn{display:block;margin-top:4px;font-size:11px;padding:3px 8px;border-radius:99px;border:1px solid var(--at-border);background:none;color:var(--primary-color,#4f98a3);cursor:pointer}
-      .timers-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+      .timers-sticky{display:none;flex-direction:column;gap:6px;position:sticky;top:0;z-index:4;margin:0 -20px 10px;padding:8px 20px;background:var(--card-background-color,#171a20);box-shadow:0 6px 10px -6px rgba(0,0,0,.4)}
+      .timers-sticky.has-timers{display:flex}
       .timer-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:var(--at-surface-1);font-size:13px}
       .timer-row.is-done{background:color-mix(in srgb,#2f9e57 18%,transparent)}
       .timer-name{flex:1;font-weight:600}
@@ -533,6 +532,12 @@ class ATableCard extends HTMLElement {
       .toggle-chip-sm{padding:5px 10px;font-size:11px;margin-right:10px}
       .toggle-chip-sm:has(input:disabled){opacity:.4;cursor:not-allowed}
       .guest-item{padding:10px 0;border-top:1px solid var(--divider-color,rgba(255,255,255,.08))}
+      .guest-item.is-loading{opacity:.5;pointer-events:none}
+      .guest-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+      .guest-item-head .proposal-replace{width:26px;height:26px}
+      .guest-item-head .proposal-replace .icon{width:13px;height:13px}
+      .guest-item .refine-details{margin-top:6px}
+      .composed-count{width:56px;margin-left:6px}
       .guest-item .proposal-nutrition{margin-top:8px}
       .guest-course-card{padding:16px}
       .guest-course-card .proposal-section{margin-top:12px;font-size:13px}
@@ -946,7 +951,10 @@ class ATableCard extends HTMLElement {
             updated = await this._ws({ type: "a_table/refine_proposal", draft_id: this._modal.draft_id, index, message });
             this._data.drafts[this._modal.draft_id].proposals[index] = updated;
           } else if (kind === "guest_course") {
-            updated = await this._ws({ type: "a_table/refine_guest_course", menu_id: this._modal.menu_id, course_key: key, message });
+            const [courseKey, itemIndexStr] = key.split(":");
+            const payload = { type: "a_table/refine_guest_course", menu_id: this._modal.menu_id, course_key: courseKey, message };
+            if (itemIndexStr !== undefined) payload.item_index = Number(itemIndexStr);
+            updated = await this._ws(payload);
             this._data.guest_menus[this._modal.menu_id] = updated;
           }
           const logKey = `${kind}:${key}`;
@@ -1028,12 +1036,26 @@ class ATableCard extends HTMLElement {
 
   _addTimer(name, minutes) {
     if (!minutes || minutes <= 0) return;
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
     const id = `timer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     this._timers.set(id, { name: name || "Chrono", remaining: minutes * 60, running: true, done: false });
     if (!this._timerInterval) {
       this._timerInterval = setInterval(() => this._tickTimers(), 1000);
     }
     this._renderTimersList();
+  }
+
+  _notifyTimerDone(name) {
+    this._toast(`${name} : chrono terminé !`, "success");
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try {
+        new Notification("À table", { body: `${name} : chrono terminé !`, tag: `atable-timer-${name}` });
+      } catch (error) {
+        /* Notification indisponible (ex. certains navigateurs mobiles) — le toast suffit. */
+      }
+    }
   }
 
   _tickTimers() {
@@ -1046,7 +1068,7 @@ class ATableCard extends HTMLElement {
           timer.remaining = 0;
           timer.running = false;
           timer.done = true;
-          this._toast(`${timer.name} : chrono terminé !`, "success");
+          this._notifyTimerDone(timer.name);
         }
       }
     });
@@ -1073,9 +1095,17 @@ class ATableCard extends HTMLElement {
       .join("");
   }
 
+  _stickyTimersBarHTML() {
+    if (!this._timers.size) return `<div class="timers-sticky" data-timers-list></div>`;
+    return `<div class="timers-sticky has-timers" data-timers-list>${this._timersListHTML()}</div>`;
+  }
+
   _renderTimersList() {
-    const list = this.shadowRoot.querySelector("[data-timers-list]");
-    if (list) list.innerHTML = this._timersListHTML();
+    const bar = this.shadowRoot.querySelector("[data-timers-list]");
+    if (bar) {
+      bar.innerHTML = this._timersListHTML();
+      bar.classList.toggle("has-timers", this._timers.size > 0);
+    }
     this._bindTimerRowActions();
   }
 
@@ -1166,6 +1196,7 @@ class ATableCard extends HTMLElement {
             <button class="close" type="button">${icon("close")}</button>
           </div>
         </header>
+        ${this._stickyTimersBarHTML()}
         ${imageBlock}
         <div class="facts">
           <div><strong>Temps total</strong><br>${this._esc(recipe.cooking_minutes ?? "À préciser")} min</div>
@@ -1186,7 +1217,6 @@ class ATableCard extends HTMLElement {
         </div>
         <div class="refine-section">
           <h3>Chronos</h3>
-          <div class="timers-list" data-timers-list>${this._timersListHTML()}</div>
           <div class="row timer-add-row">
             <input type="text" placeholder="Nom (facultatif)" data-timer-name>
             <input type="number" min="1" placeholder="Min." data-timer-minutes style="max-width:80px">
@@ -1233,7 +1263,11 @@ class ATableCard extends HTMLElement {
                 const price = p.price_per_serving != null
                   ? `<div class="proposal-meta"><span>${this._esc(p.price_per_serving)} € / portion</span></div>`
                   : "";
+                const proposalImage = p.image_status === "found" && p.image_url
+                  ? `<div class="proposal-image"><img src="${this._esc(p.image_url)}" alt="" loading="lazy"></div>`
+                  : "";
                 return `<div class="proposal" data-proposal-index="${i}">
+                  ${proposalImage}
                   <div class="proposal-head">
                     <input type="checkbox" data-proposal-check="${i}" checked>
                     <strong class="proposal-title">${this._esc(p.title || "Recette sans titre")}</strong>
@@ -2156,18 +2190,26 @@ class ATableCard extends HTMLElement {
 
   _guestCourseCardHTML(key, label, course) {
     if (!course || !course.title) return "";
+    const isComposed = Array.isArray(course.items);
     let body;
-    if (Array.isArray(course.items)) {
+    if (isComposed) {
       body = course.items
-        .map((item) => {
+        .map((item, idx) => {
           const ingredients = (item.ingredients || [])
             .map((ing) => `${ing.quantity || ""} ${ing.unit || ""} ${ing.name || ""}`)
             .join(", ");
           return `<div class="guest-item">
-            <strong>${this._esc(item.title || "")}</strong>
+            <div class="guest-item-head">
+              <strong>${this._esc(item.title || "")}</strong>
+              <button class="icon-btn proposal-replace" type="button" data-regenerate-item="${key}:${idx}" aria-label="Remplacer cette variante" title="Remplacer cette variante">${icon("refresh")}</button>
+            </div>
             <span>${this._esc(ingredients || "Aucun ingrédient")}</span>
             ${this._stepsWithTimersHTML(item.steps)}
             ${this._nutritionGridHTML(item.nutrition)}
+            <details class="refine-details">
+              <summary>Ajuster cette variante</summary>
+              ${this._renderRefineBox("guest_course", `${key}:${idx}`)}
+            </details>
           </div>`;
         })
         .join("");
@@ -2185,12 +2227,12 @@ class ATableCard extends HTMLElement {
     return `<div class="proposal guest-course-card" data-guest-course="${key}">
       <div class="proposal-head">
         <strong class="proposal-title">${label} — ${this._esc(course.title)}</strong>
-        <button class="icon-btn proposal-replace" type="button" data-regenerate-course="${key}" aria-label="Remplacer ce plat" title="Remplacer ce plat">${icon("refresh")}</button>
+        <button class="icon-btn proposal-replace" type="button" data-regenerate-course="${key}" aria-label="${isComposed ? "Remplacer tout l'assortiment" : "Remplacer ce plat"}" title="${isComposed ? "Remplacer tout l'assortiment" : "Remplacer ce plat"}">${icon("refresh")}</button>
       </div>
       ${body}
       ${course.notes ? `<div class="proposal-section"><strong>Notes</strong><span>${this._esc(course.notes)}</span></div>` : ""}
       <details class="refine-details">
-        <summary>Ajuster avec l'IA</summary>
+        <summary>${isComposed ? "Ajuster tout l'assortiment" : "Ajuster avec l'IA"}</summary>
         ${this._renderRefineBox("guest_course", key)}
       </details>
     </div>`;
@@ -2203,6 +2245,7 @@ class ATableCard extends HTMLElement {
     if (!menu) {
       const selected = this._modal.courseKeys || ATABLE_GUEST_COURSES.map(([key]) => key);
       const composed = this._modal.composedKeys || [];
+      const counts = this._modal.composedCounts || {};
       const courseChoices = ATABLE_GUEST_COURSES.map(
         ([key, label]) => `
         <label class="toggle-chip">
@@ -2210,9 +2253,10 @@ class ATableCard extends HTMLElement {
           <span>${label}</span>
         </label>
         <label class="toggle-chip toggle-chip-sm">
-          <input type="checkbox" name="composed_keys" value="${key}" ${composed.includes(key) ? "checked" : ""} ${selected.includes(key) ? "" : "disabled"}>
+          <input type="checkbox" name="composed_keys" value="${key}" data-composed-toggle ${composed.includes(key) ? "checked" : ""} ${selected.includes(key) ? "" : "disabled"}>
           <span>Assortiment</span>
-        </label>`
+        </label>
+        <input type="number" name="composed_count_${key}" class="composed-count" min="2" max="6" value="${counts[key] || 3}" title="Nombre de variantes" ${composed.includes(key) ? "" : "disabled"}>`
       ).join("");
       return `<section class="dialog">
         <header class="dialog-top">
@@ -2242,12 +2286,13 @@ class ATableCard extends HTMLElement {
     const groceryStore = this._data?.preferences?.grocery_store || "";
     const wineCards = (menu.wine_pairings || [])
       .map((p) => {
-        const query = encodeURIComponent(p.style || "");
         const searchLabel = groceryStore ? `Chercher chez ${this._esc(groceryStore)}` : "Chercher en magasin";
+        const producers = (p.producers || []).filter(Boolean);
         return `<div class="wine-pairing">
           <strong>${this._esc(p.style || "")}</strong>
           <span>${this._esc(p.description || "")}</span>
-          <a href="${grocerySearchUrl(query, groceryStore)}" target="_blank" rel="noopener" class="wine-search-link">${searchLabel} ↗</a>
+          ${producers.length ? `<span class="wine-producers">Ex. ${this._esc(producers.join(", "))}</span>` : ""}
+          <a href="${wineSearchUrl(p.style, producers, groceryStore)}" target="_blank" rel="noopener" class="wine-search-link">${searchLabel} ↗</a>
         </div>`;
       })
       .join("");
@@ -2257,6 +2302,7 @@ class ATableCard extends HTMLElement {
         <h2>Repas spécial — ${this._esc(menu.guests)} convives</h2>
         <button class="close" type="button">${icon("close")}</button>
       </header>
+      ${this._stickyTimersBarHTML()}
       <div class="facts">
         ${courseCards}
         <div class="proposal-section">
@@ -2267,7 +2313,6 @@ class ATableCard extends HTMLElement {
       </div>
       <div class="refine-section">
         <h3>Chronos</h3>
-        <div class="timers-list" data-timers-list>${this._timersListHTML()}</div>
         <div class="row timer-add-row">
           <input type="text" placeholder="Nom (facultatif)" data-timer-name>
           <input type="number" min="1" placeholder="Min." data-timer-minutes style="max-width:80px">
@@ -2287,10 +2332,18 @@ class ATableCard extends HTMLElement {
     overlay.querySelectorAll('[name="course_keys"]').forEach((cb) => {
       cb.addEventListener("change", () => {
         const composedCb = overlay.querySelector(`[name="composed_keys"][value="${cb.value}"]`);
+        const countInput = overlay.querySelector(`[name="composed_count_${cb.value}"]`);
         if (composedCb) {
           composedCb.disabled = !cb.checked;
           if (!cb.checked) composedCb.checked = false;
         }
+        if (countInput) countInput.disabled = !cb.checked || !composedCb?.checked;
+      });
+    });
+    overlay.querySelectorAll("[data-composed-toggle]").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const countInput = overlay.querySelector(`[name="composed_count_${cb.value}"]`);
+        if (countInput) countInput.disabled = !cb.checked;
       });
     });
     overlay.querySelector("[data-generate-guest]")?.addEventListener("click", async (event) => {
@@ -2299,17 +2352,23 @@ class ATableCard extends HTMLElement {
       const notes = overlay.querySelector('[name="notes"]')?.value.trim() || "";
       const course_keys = [...overlay.querySelectorAll('[name="course_keys"]:checked')].map((cb) => cb.value);
       const composed_keys = [...overlay.querySelectorAll('[name="composed_keys"]:checked')].map((cb) => cb.value);
+      const composed_counts = {};
+      composed_keys.forEach((key) => {
+        const countInput = overlay.querySelector(`[name="composed_count_${key}"]`);
+        composed_counts[key] = Number(countInput?.value) || 3;
+      });
       if (!course_keys.length) {
         this._toast("Choisis au moins un service.", "error");
         return;
       }
       this._modal.courseKeys = course_keys;
       this._modal.composedKeys = composed_keys;
+      this._modal.composedCounts = composed_counts;
       const label = overlay.querySelector("[data-generate-guest-label]");
       btn.disabled = true;
       if (label) label.textContent = "Génération en cours…";
       try {
-        const menu = await this._ws({ type: "a_table/generate_guest_menu", guests, notes, course_keys, composed_keys });
+        const menu = await this._ws({ type: "a_table/generate_guest_menu", guests, notes, course_keys, composed_keys, composed_counts });
         this._data.guest_menus = this._data.guest_menus || {};
         this._data.guest_menus[menu.id] = menu;
         this._modal.menu_id = menu.id;
@@ -2333,6 +2392,27 @@ class ATableCard extends HTMLElement {
         } catch (error) {
           this._toast(error?.message || "Remplacement impossible.", "error");
           card?.classList.remove("is-loading");
+        }
+      });
+    });
+
+    overlay.querySelectorAll("[data-regenerate-item]").forEach((btn) => {
+      btn.addEventListener("click", async (event) => {
+        const [courseKey, itemIndexStr] = event.currentTarget.dataset.regenerateItem.split(":");
+        const itemBox = event.currentTarget.closest(".guest-item");
+        itemBox?.classList.add("is-loading");
+        try {
+          const menu = await this._ws({
+            type: "a_table/regenerate_guest_course",
+            menu_id: this._modal.menu_id,
+            course_key: courseKey,
+            item_index: Number(itemIndexStr),
+          });
+          this._data.guest_menus[menu.id] = menu;
+          this._mountModal();
+        } catch (error) {
+          this._toast(error?.message || "Remplacement impossible.", "error");
+          itemBox?.classList.remove("is-loading");
         }
       });
     });

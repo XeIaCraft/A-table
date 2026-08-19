@@ -678,6 +678,7 @@ async def websocket_refine_proposal(
         vol.Optional("notes", default=""): str,
         vol.Optional("course_keys"): [str],
         vol.Optional("composed_keys"): [str],
+        vol.Optional("composed_counts"): dict,
     }
 )
 @websocket_api.async_response
@@ -695,6 +696,7 @@ async def websocket_generate_guest_menu(
             notes=msg["notes"],
             course_keys=msg.get("course_keys"),
             composed_keys=msg.get("composed_keys"),
+            composed_counts=msg.get("composed_counts"),
         )
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_input", str(err))
@@ -708,6 +710,7 @@ async def websocket_generate_guest_menu(
         vol.Required("type"): "a_table/regenerate_guest_course",
         vol.Required("menu_id"): str,
         vol.Required("course_key"): str,
+        vol.Optional("item_index"): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }
 )
 @websocket_api.async_response
@@ -716,13 +719,14 @@ async def websocket_regenerate_guest_course(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Remplace un seul plat d'un menu invité via l'IA."""
+    """Remplace un seul plat (ou une variante d'assortiment) d'un menu invité via l'IA."""
     coordinator = _get_coordinator(hass)
 
     try:
         menu = await coordinator.async_regenerate_guest_course(
             menu_id=msg["menu_id"],
             course_key=msg["course_key"],
+            item_index=msg.get("item_index"),
         )
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_input", str(err))
@@ -737,6 +741,7 @@ async def websocket_regenerate_guest_course(
         vol.Required("menu_id"): str,
         vol.Required("course_key"): str,
         vol.Required("message"): str,
+        vol.Optional("item_index"): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }
 )
 @websocket_api.async_response
@@ -745,7 +750,7 @@ async def websocket_refine_guest_course(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Ajuste un plat d'un menu invité via une consigne libre, en dialogue avec l'IA."""
+    """Ajuste un plat (ou une variante d'assortiment) via une consigne libre, en dialogue avec l'IA."""
     coordinator = _get_coordinator(hass)
 
     try:
@@ -753,6 +758,7 @@ async def websocket_refine_guest_course(
             menu_id=msg["menu_id"],
             course_key=msg["course_key"],
             message=msg["message"],
+            item_index=msg.get("item_index"),
         )
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_input", str(err))
