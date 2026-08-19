@@ -266,7 +266,7 @@ class ATableCard extends HTMLElement {
     const swatch = hasPhoto
       ? `<div class="meal-swatch meal-swatch-photo"><img src="${this._esc(recipe.image_url)}" alt="" loading="lazy"></div>`
       : `<div class="meal-swatch" style="${swatchStyle}">${icon(categoryIcon(recipe.tags))}</div>`;
-    return `<article class="meal ${hasPhoto ? "has-photo" : ""}" data-card-id="${this._esc(card.id)}">
+    return `<article class="meal enter ${hasPhoto ? "has-photo" : ""}" data-card-id="${this._esc(card.id)}">
       ${swatch}
       <div class="meal-row">
         <button class="grip" type="button" data-grip="${this._esc(card.id)}" aria-label="Déplacer ${this._esc(recipe.title)}" title="Maintenir puis déplacer">${icon("grip")}</button>
@@ -285,6 +285,10 @@ class ATableCard extends HTMLElement {
 
   _emptyHTML(text, iconName = "meal") {
     return `<div class="empty">${icon(iconName)}<span>${text}</span></div>`;
+  }
+
+  _emptyStateHTML(iconName, text, ctaHTML = "") {
+    return `<div class="empty-state">${icon(iconName, "empty-state-icon")}<p class="empty-state-text">${text}</p>${ctaHTML ? `<div class="empty-state-cta">${ctaHTML}</div>` : ""}</div>`;
   }
 
   _todayHeroHTML() {
@@ -306,7 +310,7 @@ class ATableCard extends HTMLElement {
     const bgStyle = hasPhoto
       ? `background-image:url('${this._esc(recipe.image_url)}')`
       : `background-image:linear-gradient(150deg,${pal.from},${pal.to})`;
-    return `<section class="hero">
+    return `<section class="hero enter">
       <h2 class="at-section-title">Aujourd'hui</h2>
       <div class="hero-card" style="${bgStyle}">
         <div class="hero-scrim">
@@ -340,7 +344,7 @@ class ATableCard extends HTMLElement {
   _dayHTML(key, label) {
     const cards = this._cards(key);
     const isToday = key === todayKey();
-    return `<section class="day ${isToday ? "is-today" : ""}"><header><span>${label}${isToday ? '<i class="today-dot"></i>' : ""}</span><b>${cards.length}</b></header><div class="zone" data-zone="${key}">${cards.length ? cards.map((card) => this._mealHTML(card)).join("") : this._emptyHTML("Dépose ici")}</div></section>`;
+    return `<section class="day ${isToday ? "is-today" : ""}"><header><span>${label}${isToday ? '<i class="today-dot"></i>' : ""}</span><b>${cards.length}</b></header><div class="zone" data-zone="${key}">${cards.length ? cards.map((card) => this._mealHTML(card)).join("") : this._emptyStateHTML("meal", "Rien de prévu ce jour-là.", `<button type="button" class="pill pill-ok" data-hero-generate>${icon("sparkles")} Générer des idées</button>`)}</div></section>`;
   }
 
   _tempIngredientHTML(ing) {
@@ -353,13 +357,16 @@ class ATableCard extends HTMLElement {
     </div>`;
   }
 
-  _skeletonHTML() {
+  _skeletonHTML(rows = 3, height = 90) {
     const block = (h) => `<div class="skeleton" style="height:${h}px"></div>`;
+    if (rows <= 1) {
+      return `<div class="skeleton-wrap">${block(height)}</div>`;
+    }
     return `<div class="skeleton-wrap">
       ${block(64)}
       ${block(52)}
       ${block(120)}
-      <div class="skeleton-row">${block(90)}${block(90)}${block(90)}</div>
+      <div class="skeleton-row">${Array.from({ length: rows }, () => block(height)).join("")}</div>
     </div>`;
   }
 
@@ -491,9 +498,18 @@ class ATableCard extends HTMLElement {
       .zone.over,.backlog-zone.over{outline:2px dashed var(--primary-color,#4f98a3);outline-offset:2px;background:color-mix(in srgb,var(--primary-color,#4f98a3) 7%,transparent)}
       .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:22px 8px;color:var(--secondary-text-color,#aeb7c5);font-size:12px;text-align:center}
       .empty .icon{width:34px;height:auto;opacity:.4}
+      .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:36px 16px;text-align:center;color:var(--secondary-text-color,#aeb7c5)}
+      .empty-state-icon{width:40px;height:auto;opacity:.35}
+      .empty-state-text{margin:0;font-size:13px;max-width:280px}
+      .empty-state-cta{margin-top:4px}
       .meal{position:relative;height:172px;min-height:0;flex:0 0 172px;border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-glass-2);box-shadow:0 1px 2px rgba(0,0,0,.06);overflow:hidden;transition:transform 160ms var(--at-ease),box-shadow 160ms var(--at-ease),opacity 160ms var(--at-ease)}
-      .meal:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,0,0,.16)}
+      .meal:hover{transform:translateY(-3px) scale(1.012);box-shadow:0 14px 30px rgba(0,0,0,.24),0 0 0 1px color-mix(in srgb,var(--primary-color,#4f98a3) 35%,transparent)}
       .meal.dragging{opacity:.35}
+      .meal.enter,.hero.enter{animation:at-enter 160ms var(--at-ease)}
+      @keyframes at-enter{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+      @media (prefers-reduced-motion: reduce){.meal.enter,.hero.enter{animation:none}}
+      .drop-indicator{position:absolute;height:3px;border-radius:99px;background:var(--primary-color,#4f98a3);box-shadow:0 0 8px color-mix(in srgb,var(--primary-color,#4f98a3) 70%,transparent);pointer-events:none;z-index:10000}
+      .day:hover{box-shadow:0 4px 18px rgba(0,0,0,.12)}
       .meal-swatch{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:flex-end;padding:8px;background:linear-gradient(150deg,var(--sw-from,#93764f),var(--sw-to,#5b452c));color:rgba(255,255,255,.85)}
       .meal-swatch-photo{padding:0;overflow:hidden}
       .meal-swatch-photo img{width:100%;height:100%;object-fit:cover;display:block}
@@ -528,6 +544,16 @@ class ATableCard extends HTMLElement {
       .at-dish-title{font-family:var(--at-font-display);font-weight:600}
       .dialog-sm{width:min(420px,100%)}
       .dialog-lg{width:min(900px,100%)}
+      .dialog-cook{position:fixed;inset:0;width:100%;height:100%;max-height:100%;border-radius:0;margin:0;display:flex;flex-direction:column}
+      .overlay:has(.dialog-cook){padding:0}
+      .cook-progress{margin-top:12px;font-size:14px;font-weight:700;color:var(--secondary-text-color,#aeb7c5);text-align:center}
+      .cook-dish-badge{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px;font-size:13px;font-weight:600}
+      .cook-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+      .cook-step{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px 12px}
+      .cook-step p{font-size:clamp(20px,4vw,32px);line-height:1.4;font-family:var(--at-font-display);max-width:640px}
+      .cook-level-badge{display:inline-block;padding:6px 14px;border-radius:99px;background:var(--primary-color,#4f98a3);color:#fff;font-weight:700;font-size:13px}
+      .cook-nav{justify-content:center;gap:16px}
+      .cook-nav-btn{min-height:52px;padding:0 24px;font-size:16px;font-weight:700}
       @keyframes at-fade{from{opacity:0}to{opacity:1}}
       @keyframes at-pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
       .dialog-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:var(--at-space-4)}
@@ -585,6 +611,10 @@ class ATableCard extends HTMLElement {
       .wine-search-link{color:var(--primary-color,#4f98a3);font-size:12px;margin-top:4px;text-decoration:none}
       .wine-search-link:hover{text-decoration:underline}
       .recipe-image{margin:10px 0;border-radius:var(--at-radius-sm);overflow:hidden}
+      .guest-course-image{height:140px}
+      .guest-course-image img{width:100%;height:100%;object-fit:cover;display:block}
+      .guest-course-image-fallback{display:grid;place-items:center;color:rgba(255,255,255,.85)}
+      .guest-course-image-fallback .icon{width:30px;height:30px}
       .recipe-image img{width:100%;max-height:260px;object-fit:cover;display:block}
       .proposal-image{margin:-1px -1px 10px;border-radius:var(--at-radius-md) var(--at-radius-md) 0 0;overflow:hidden}
       .proposal-image img{width:100%;height:120px;object-fit:cover;display:block}
@@ -649,6 +679,11 @@ class ATableCard extends HTMLElement {
       .guest-item-head .proposal-replace .icon{width:13px;height:13px}
       .guest-item .refine-details{margin-top:6px}
       .composed-count{width:56px;margin-left:6px}
+      .composed-stepper{display:inline-flex;align-items:center;gap:6px;margin-left:6px}
+      .composed-stepper[hidden]{display:none}
+      .stepper-btn{width:26px;height:26px;border-radius:7px;border:1px solid var(--at-border);background:transparent;color:inherit;font-size:15px;line-height:1;display:grid;place-items:center}
+      .stepper-btn:hover{background:color-mix(in srgb,var(--primary-text-color,#fff) 10%,transparent)}
+      .stepper-output{min-width:18px;text-align:center;font-weight:700}
       .guest-item .proposal-nutrition{margin-top:8px}
       .guest-course-card{padding:16px}
       .guest-course-card .proposal-section{margin-top:12px;font-size:13px}
@@ -795,8 +830,9 @@ class ATableCard extends HTMLElement {
     root.querySelector("[data-open-guest]")?.addEventListener("click", () => this._openGuest());
     root.querySelector(".add")?.addEventListener("click", () => this._openAdd());
     root.querySelector(".generate")?.addEventListener("click", () => this._generate());
-    root.querySelector("[data-hero-generate]")?.addEventListener("click", () => this._generate());
+    root.querySelectorAll("[data-hero-generate]").forEach((btn) => btn.addEventListener("click", () => this._generate()));
     this._bindWeekDots(root);
+    this._cleanupEnterAnimations(root);
     root.querySelectorAll("[data-count]").forEach((button) =>
       button.addEventListener("click", () => {
         const current = Number(this._data.preferences?.default_recipe_count || 6);
@@ -830,6 +866,21 @@ class ATableCard extends HTMLElement {
     root.querySelectorAll("[data-remove]").forEach((btn) =>
       btn.addEventListener("click", () => this._removeTemp(btn.dataset.remove))
     );
+  }
+
+  _cleanupEnterAnimations(root) {
+    const els = root.querySelectorAll(".enter");
+    if (!els.length) return;
+    const clear = () => els.forEach((el) => el.classList.remove("enter"));
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      clear();
+      return;
+    }
+    els.forEach((el) => {
+      const done = () => { el.classList.remove("enter"); el.removeEventListener("transitionend", done); el.removeEventListener("animationend", done); };
+      el.addEventListener("animationend", done, { once: true });
+    });
+    setTimeout(clear, 220);
   }
 
   _bindGrip(grip) {
@@ -897,6 +948,34 @@ class ATableCard extends HTMLElement {
       zone.classList.toggle("over", zone === target)
     );
     state.target = target;
+    this._updateDropIndicator(target, event.clientY, state.meal);
+  }
+
+  _updateDropIndicator(target, clientY, dragMeal) {
+    if (!this._dropIndicator) {
+      this._dropIndicator = document.createElement("div");
+      this._dropIndicator.className = "drop-indicator";
+      this._dropIndicator.style.display = "none";
+      this.shadowRoot.append(this._dropIndicator);
+    }
+    if (!target) {
+      this._dropIndicator.style.display = "none";
+      return;
+    }
+    const siblings = [...target.querySelectorAll(".meal")].filter((m) => m !== dragMeal);
+    let before = null;
+    for (const sib of siblings) {
+      const rect = sib.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if (clientY < mid) { before = sib; break; }
+    }
+    const hostRect = this.getBoundingClientRect();
+    const refRect = before ? before.getBoundingClientRect() : (siblings.length ? siblings[siblings.length - 1].getBoundingClientRect() : target.getBoundingClientRect());
+    const top = (before ? refRect.top : refRect.bottom) - hostRect.top;
+    this._dropIndicator.style.display = "block";
+    this._dropIndicator.style.top = `${top}px`;
+    this._dropIndicator.style.left = `${refRect.left - hostRect.left}px`;
+    this._dropIndicator.style.width = `${refRect.width}px`;
   }
 
   _dragEnd(event) {
@@ -910,6 +989,8 @@ class ATableCard extends HTMLElement {
     clearTimeout(this._touchTimer);
     this._ghost?.remove();
     this._ghost = null;
+    this._dropIndicator?.remove();
+    this._dropIndicator = null;
     state.meal.classList.remove("dragging");
     this.shadowRoot.querySelectorAll("[data-zone]").forEach((zone) => zone.classList.remove("over"));
     if (state.started && state.target?.dataset.zone) {
@@ -1127,6 +1208,7 @@ class ATableCard extends HTMLElement {
   }
 
   _closeModal() {
+    if (this._modal?.type === "cook") this._releaseWakeLock();
     this._modal = null;
     this._settingsDraft = null;
     this._clearTimers();
@@ -1268,6 +1350,140 @@ class ATableCard extends HTMLElement {
     });
   }
 
+  // ---- Mode recette (cuisson guidée) --------------------------------------
+
+  _flatCookPlan(recipes) {
+    const plan = [];
+    recipes.forEach((recipe, idx) => {
+      (recipe.steps || []).forEach((stepText) => plan.push({ recipe_index: idx, step_text: stepText }));
+    });
+    return plan;
+  }
+
+  async _requestWakeLock() {
+    if (!("wakeLock" in navigator)) return;
+    try {
+      this._wakeLock = await navigator.wakeLock.request("screen");
+    } catch (error) {
+      /* échec silencieux (ex. onglet non visible) */
+    }
+  }
+
+  _releaseWakeLock() {
+    try {
+      this._wakeLock?.release?.();
+    } catch (error) {
+      /* rien à faire */
+    }
+    this._wakeLock = null;
+  }
+
+  async _openCookMode(recipes) {
+    if (!recipes?.length) return;
+    this._modal = { type: "cook", recipes, stepIndex: 0, plan: null, loading: recipes.length > 1 };
+    this._mountModal();
+    this._requestWakeLock();
+    if (recipes.length > 1) {
+      try {
+        const result = await this._ws({
+          type: "a_table/generate_cook_plan",
+          recipes: recipes.map((r) => ({ name: r.title, steps: r.steps || [] })),
+        });
+        this._modal.plan = Array.isArray(result?.plan) && result.plan.length ? result.plan : this._flatCookPlan(recipes);
+      } catch (error) {
+        this._modal.plan = this._flatCookPlan(recipes);
+      }
+      this._modal.loading = false;
+      if (this._modal.type === "cook") this._mountModal();
+    }
+  }
+
+  _cookModeSteps() {
+    const state = this._modal;
+    if (state.recipes.length === 1) {
+      return (state.recipes[0].steps || []).map((step_text) => ({ recipe_index: 0, step_text }));
+    }
+    return state.plan || [];
+  }
+
+  _cookStepLevelBadgeHTML(text) {
+    const match = String(text || "").match(/niveau\s*(\d+)\s*\/\s*(\d+)/i);
+    if (!match) return "";
+    return `<span class="cook-level-badge">Niveau ${this._esc(match[1])}/${this._esc(match[2])}</span>`;
+  }
+
+  _cookModeHTML() {
+    const state = this._modal;
+    const multi = state.recipes.length > 1;
+    if (multi && state.loading) {
+      return `<section class="dialog dialog-cook">
+        <header class="dialog-top">
+          <h2>Mode recette</h2>
+          <button class="close" type="button" data-close-cook>${icon("close")}</button>
+        </header>
+        <p class="taste-hint">Préparation d'un plan de cuisson entrelacé…</p>
+        ${this._skeletonHTML(3, 60)}
+      </section>`;
+    }
+    const steps = this._cookModeSteps();
+    if (!steps.length) {
+      return `<section class="dialog dialog-cook">
+        <header class="dialog-top">
+          <h2>Mode recette</h2>
+          <button class="close" type="button" data-close-cook>${icon("close")}</button>
+        </header>
+        ${this._emptyStateHTML("meal", "Aucune étape disponible pour cette recette.")}
+      </section>`;
+    }
+    const idx = Math.max(0, Math.min(state.stepIndex, steps.length - 1));
+    state.stepIndex = idx;
+    const current = steps[idx];
+    const recipe = state.recipes[current.recipe_index] || {};
+    const pal = categoryPalette(recipe.tags);
+    const progress = multi
+      ? `Étape ${idx + 1}/${steps.length} — ${this._esc(recipe.title || "")}`
+      : `Étape ${idx + 1}/${steps.length}`;
+    const dishBadge = multi
+      ? `<span class="cook-dish-badge"><i class="cook-dot" style="background:${pal.from}"></i>${this._esc(recipe.title || "")}</span>`
+      : "";
+    const minutes = this._stepTimerMinutes(current.step_text);
+    const timerBtn = minutes
+      ? `<button class="step-timer-btn" type="button" data-start-step-timer="${minutes}" data-step-label="${this._esc((current.step_text || "").slice(0, 30))}">⏱ Lancer (${minutes} min)</button>`
+      : "";
+    return `<section class="dialog dialog-cook">
+      <header class="dialog-top">
+        <h2>Mode recette</h2>
+        <button class="close" type="button" data-close-cook>${icon("close")}</button>
+      </header>
+      ${this._stickyTimersBarHTML()}
+      <div class="cook-progress">${this._esc(progress)}</div>
+      ${dishBadge}
+      <div class="cook-step">
+        <p>${this._esc(current.step_text)}</p>
+        ${this._cookStepLevelBadgeHTML(current.step_text)}
+        ${timerBtn}
+      </div>
+      <footer class="actions cook-nav">
+        <button class="cancel cook-nav-btn" type="button" data-cook-prev ${idx === 0 ? "disabled" : ""}>← Précédent</button>
+        <button class="save cook-nav-btn" type="button" data-cook-next ${idx === steps.length - 1 ? "disabled" : ""}>Suivant →</button>
+      </footer>
+    </section>`;
+  }
+
+  _bindCookModal(overlay) {
+    overlay.querySelector("[data-close-cook]")?.addEventListener("click", () => this._closeModal());
+    overlay.querySelector("[data-cook-prev]")?.addEventListener("click", () => {
+      this._modal.stepIndex = Math.max(0, this._modal.stepIndex - 1);
+      this._mountModal();
+    });
+    overlay.querySelector("[data-cook-next]")?.addEventListener("click", () => {
+      const steps = this._cookModeSteps();
+      this._modal.stepIndex = Math.min(steps.length - 1, this._modal.stepIndex + 1);
+      this._mountModal();
+    });
+    this._bindTimers(overlay);
+  }
+
   _mountModal() {
     this.shadowRoot.querySelector(".overlay")?.remove();
     if (!this._modal) return;
@@ -1346,9 +1562,12 @@ class ATableCard extends HTMLElement {
         </div>
         <footer class="actions">
           <button class="cancel" type="button">Fermer</button>
+          <button class="cancel" type="button" data-open-cook-mode>${icon("play")} Mode recette</button>
           <button class="save" type="button" data-modal-cook="${this._esc(card.id)}">Cuisiné</button>
         </footer>
       </section>`;
+    } else if (this._modal.type === "cook") {
+      overlay.innerHTML = this._cookModeHTML();
     } else if (this._modal.type === "validate") {
       const draft = this._data?.drafts?.[this._modal.draft_id];
       const proposals = draft?.proposals || [];
@@ -1616,7 +1835,15 @@ class ATableCard extends HTMLElement {
           btn.disabled = false;
         }
       });
+      overlay.querySelector("[data-open-cook-mode]")?.addEventListener("click", () => {
+        const card = this._data?.meal_cards?.[this._modal.id];
+        const recipe = card && this._recipe(card);
+        if (!recipe) return;
+        this._openCookMode([recipe]);
+      });
       this._bindTimers(overlay);
+    } else if (this._modal.type === "cook") {
+      this._bindCookModal(overlay);
     } else if (this._modal.type === "validate") {
       overlay.querySelectorAll("[data-close-draft]").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -1923,7 +2150,7 @@ class ATableCard extends HTMLElement {
   }
 
   _libraryResultsHTML(results) {
-    if (!results.length) return this._emptyHTML("Aucune recette ne correspond à ce filtre.");
+    if (!results.length) return this._emptyStateHTML("search", "Aucune recette ne correspond à ce filtre.");
     return `<div class="library-list">${results
       .map((r) => {
         const cooking = Number.isInteger(r.cooking_minutes) ? `${r.cooking_minutes} min` : "Cuisson à préciser";
@@ -1988,7 +2215,10 @@ class ATableCard extends HTMLElement {
 
     overlay.querySelector("[data-library-search]")?.addEventListener("input", (event) => {
       this._modal.search = event.currentTarget.value;
-      refreshResults();
+      const container = overlay.querySelector("[data-library-results]");
+      if (container) container.innerHTML = this._skeletonHTML(4, 64);
+      clearTimeout(this._librarySearchDebounce);
+      this._librarySearchDebounce = setTimeout(refreshResults, 150);
     });
     overlay.querySelectorAll("[data-library-tag]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2036,7 +2266,7 @@ class ATableCard extends HTMLElement {
   }
 
   _historyListHTML(entries) {
-    if (!entries.length) return this._emptyHTML("Aucun repas cuisiné sur cette période.");
+    if (!entries.length) return this._emptyStateHTML("history", "Aucun repas cuisiné sur cette période.");
     return `<div class="history-items">${entries
       .map((h) => {
         const recipe = this._data?.recipes?.[h.recipe_id] || {};
@@ -2196,7 +2426,7 @@ class ATableCard extends HTMLElement {
             </div>
           </div>`)
           .join("")
-      : this._emptyHTML("Rien à acheter : planifie ou ajoute des repas à cuisiner.");
+      : this._emptyStateHTML("basket", "Rien à acheter : planifie ou ajoute des repas à cuisiner.");
 
     const todoEntityId = this._data?.preferences?.todo_entity_id;
     const transferHint = todoEntityId
@@ -2304,6 +2534,15 @@ class ATableCard extends HTMLElement {
       .join("")}</ol>`;
   }
 
+  _guestPhotoBlockHTML(item) {
+    const hasPhoto = item?.image_status === "found" && item?.image_url;
+    if (hasPhoto) {
+      return `<div class="recipe-image guest-course-image"><img src="${this._esc(item.image_url)}" alt="${this._esc(item.title || "")}" loading="lazy"></div>`;
+    }
+    const pal = categoryPalette(item?.tags);
+    return `<div class="recipe-image guest-course-image guest-course-image-fallback" style="background:linear-gradient(150deg,${pal.from},${pal.to})">${icon(categoryIcon(item?.tags))}</div>`;
+  }
+
   _guestCourseCardHTML(key, label, course) {
     if (!course || !course.title) return "";
     const isComposed = Array.isArray(course.items);
@@ -2319,6 +2558,7 @@ class ATableCard extends HTMLElement {
               <strong>${this._esc(item.title || "")}</strong>
               <button class="icon-btn proposal-replace" type="button" data-regenerate-item="${key}:${idx}" aria-label="Remplacer cette variante" title="Remplacer cette variante">${icon("refresh")}</button>
             </div>
+            ${this._guestPhotoBlockHTML(item)}
             <span>${this._esc(ingredients || "Aucun ingrédient")}</span>
             ${this._stepsWithTimersHTML(item.steps)}
             ${this._nutritionGridHTML(item.nutrition)}
@@ -2333,7 +2573,8 @@ class ATableCard extends HTMLElement {
       const ingredients = (course.ingredients || [])
         .map((ing) => `${ing.quantity || ""} ${ing.unit || ""} ${ing.name || ""}`)
         .join(", ");
-      body = `<div class="proposal-section">
+      body = `${this._guestPhotoBlockHTML(course)}
+      <div class="proposal-section">
         <strong>Ingrédients</strong>
         <span>${this._esc(ingredients || "Aucun")}</span>
       </div>
@@ -2372,7 +2613,12 @@ class ATableCard extends HTMLElement {
           <input type="checkbox" name="composed_keys" value="${key}" data-composed-toggle ${composed.includes(key) ? "checked" : ""} ${selected.includes(key) ? "" : "disabled"}>
           <span>Assortiment</span>
         </label>
-        <input type="number" name="composed_count_${key}" class="composed-count" min="2" max="6" value="${counts[key] || 3}" title="Nombre de variantes" ${composed.includes(key) ? "" : "disabled"}>`
+        <div class="composed-stepper" data-composed-stepper="${key}" ${composed.includes(key) ? "" : "hidden"}>
+          <button type="button" class="stepper-btn" data-composed-minus="${key}" aria-label="Moins de variantes">−</button>
+          <input type="hidden" name="composed_count_${key}" value="${counts[key] || 3}">
+          <output class="stepper-output" data-composed-output="${key}">${counts[key] || 3}</output>
+          <button type="button" class="stepper-btn" data-composed-plus="${key}" aria-label="Plus de variantes">+</button>
+        </div>`
       ).join("");
       return `<section class="dialog">
         <header class="dialog-top">
@@ -2437,29 +2683,69 @@ class ATableCard extends HTMLElement {
       </div>
       <footer class="actions">
         <button class="cancel" type="button" data-dismiss-guest>Supprimer ce menu</button>
+        <button class="cancel" type="button" data-open-cook-mode-guest>${icon("play")} Mode recette</button>
         <button class="save" type="button" data-close-guest>Fermer</button>
       </footer>
     </section>`;
   }
 
+  _guestMenuAsCookRecipes(menu) {
+    const keys = menu.course_keys || ATABLE_GUEST_COURSES.map(([key]) => key);
+    const recipes = [];
+    keys.forEach((key) => {
+      const course = menu.courses?.[key];
+      if (!course) return;
+      if (Array.isArray(course.items)) {
+        course.items.forEach((item) => {
+          if (item?.title) recipes.push({ title: item.title, steps: item.steps || [] });
+        });
+      } else if (course.title) {
+        recipes.push({ title: course.title, steps: course.steps || [] });
+      }
+    });
+    return recipes;
+  }
+
   _bindGuestModal(overlay) {
     overlay.querySelector("[data-close-guest]")?.addEventListener("click", () => this._closeModal());
+    overlay.querySelector("[data-open-cook-mode-guest]")?.addEventListener("click", () => {
+      const menu = this._data?.guest_menus?.[this._modal.menu_id];
+      if (!menu) return;
+      const recipes = this._guestMenuAsCookRecipes(menu);
+      if (!recipes.length) {
+        this._toast("Aucune étape à cuisiner dans ce menu.", "error");
+        return;
+      }
+      this._openCookMode(recipes);
+    });
     if (this._modal.menu_id) this._bindTimers(overlay);
     overlay.querySelectorAll('[name="course_keys"]').forEach((cb) => {
       cb.addEventListener("change", () => {
         const composedCb = overlay.querySelector(`[name="composed_keys"][value="${cb.value}"]`);
-        const countInput = overlay.querySelector(`[name="composed_count_${cb.value}"]`);
+        const stepper = overlay.querySelector(`[data-composed-stepper="${cb.value}"]`);
         if (composedCb) {
           composedCb.disabled = !cb.checked;
           if (!cb.checked) composedCb.checked = false;
         }
-        if (countInput) countInput.disabled = !cb.checked || !composedCb?.checked;
+        if (stepper) stepper.hidden = !cb.checked || !composedCb?.checked;
       });
     });
     overlay.querySelectorAll("[data-composed-toggle]").forEach((cb) => {
       cb.addEventListener("change", () => {
-        const countInput = overlay.querySelector(`[name="composed_count_${cb.value}"]`);
-        if (countInput) countInput.disabled = !cb.checked;
+        const stepper = overlay.querySelector(`[data-composed-stepper="${cb.value}"]`);
+        if (stepper) stepper.hidden = !cb.checked;
+      });
+    });
+    overlay.querySelectorAll("[data-composed-minus],[data-composed-plus]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.dataset.composedMinus || btn.dataset.composedPlus;
+        const input = overlay.querySelector(`[name="composed_count_${key}"]`);
+        const output = overlay.querySelector(`[data-composed-output="${key}"]`);
+        if (!input) return;
+        const delta = btn.dataset.composedPlus ? 1 : -1;
+        const next = Math.max(2, Math.min(6, Number(input.value || 3) + delta));
+        input.value = next;
+        if (output) output.textContent = next;
       });
     });
     overlay.querySelector("[data-generate-guest]")?.addEventListener("click", async (event) => {
@@ -2483,6 +2769,11 @@ class ATableCard extends HTMLElement {
       const label = overlay.querySelector("[data-generate-guest-label]");
       btn.disabled = true;
       if (label) label.textContent = "Génération en cours…";
+      const dialog = overlay.querySelector(".dialog");
+      const skeletonWrap = document.createElement("div");
+      skeletonWrap.innerHTML = this._skeletonHTML(3, 90);
+      skeletonWrap.setAttribute("data-guest-generating-skeleton", "");
+      dialog?.append(skeletonWrap);
       try {
         const menu = await this._ws({ type: "a_table/generate_guest_menu", guests, notes, course_keys, composed_keys, composed_counts });
         this._data.guest_menus = this._data.guest_menus || {};
@@ -2773,6 +3064,9 @@ class ATableCard extends HTMLElement {
               </label>
             `).join("")}
           </div>
+          <label>Nombre de niveaux de votre plaque de cuisson
+            <input type="number" name="stove_levels" min="1" max="20" placeholder="6" value="${prefs.stove_levels ?? ""}">
+          </label>
         </div>
       </div>
 
@@ -3175,6 +3469,7 @@ class ATableCard extends HTMLElement {
       liked_ingredients: prefs.liked_ingredients || [],
       disliked_ingredients: prefs.disliked_ingredients || [],
       available_equipment: availableEquipment,
+      stove_levels: data.get("stove_levels") ? Number(data.get("stove_levels")) : null,
       objectives,
       ai_task_entity_id: String(data.get("ai_task_entity_id") || "") || prefs.ai_task_entity_id,
       todo_entity_id: String(data.get("todo_entity_id") || "") || null,

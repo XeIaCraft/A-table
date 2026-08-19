@@ -40,6 +40,7 @@ DEFAULT_DATA: dict[str, Any] = {
         "budget_per_serving": None,
         "target_kcal_per_serving": None,
         "pexels_api_key": None,
+        "stove_levels": None,
         "grocery_store": "",  # where user shops
         "time_profile": "normal",  # quick (<=20), normal (<=60), chill (>60)
         "complexity": "free",  # simple, medium, free

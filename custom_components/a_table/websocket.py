@@ -50,6 +50,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_remove_history_entry)
     websocket_api.async_register_command(hass, websocket_restore_history_entry)
     websocket_api.async_register_command(hass, websocket_fetch_recipe_image)
+    websocket_api.async_register_command(hass, websocket_generate_cook_plan)
 
 
 @callback
@@ -927,3 +928,25 @@ async def websocket_fetch_recipe_image(
         connection.send_error(msg["id"], "invalid_input", str(err))
         return
     connection.send_result(msg["id"], recipe)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "a_table/generate_cook_plan",
+        vol.Required("recipes"): [dict],
+    }
+)
+@websocket_api.async_response
+async def websocket_generate_cook_plan(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Génère un plan de cuisson entrelacé pour plusieurs plats à la fois."""
+    coordinator = _get_coordinator(hass)
+    try:
+        plan = await coordinator.async_generate_cook_plan(msg["recipes"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_input", str(err))
+        return
+    connection.send_result(msg["id"], plan)

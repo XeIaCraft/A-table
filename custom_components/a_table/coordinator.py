@@ -63,6 +63,17 @@ class ATableCoordinator:
         """Retourne l'entité ai_task configurée, ou la valeur par défaut."""
         return prefs.get("ai_task_entity_id") or DEFAULT_AI_TASK_ENTITY_ID
 
+    def _stove_level_instruction(self, prefs: dict[str, Any]) -> str:
+        """Retourne une consigne sur les niveaux de la plaque de cuisson, si configurés."""
+        levels = prefs.get("stove_levels")
+        if not levels:
+            return ""
+        return (
+            f"\n- Plaque de cuisson : {levels} niveaux de puissance. Pour toute étape "
+            f"utilisant la plaque de cuisson, précise le niveau à utiliser (1 à {levels}), "
+            f"ex. \"Faites revenir à feu vif — niveau {levels}/{levels}\"."
+        )
+
     def _match_temp_ingredient_ids(
         self,
         ingredients: list[dict[str, Any]],
@@ -535,6 +546,11 @@ class ATableCoordinator:
         max_protein = rules.get("max_repeat_protein", 2)
         max_starch = rules.get("max_repeat_starch", 2)
         max_vegetable = rules.get("max_repeat_vegetable", 2)
+
+        stove_note = self._stove_level_instruction(prefs)
+        if stove_note:
+            lines.append(stove_note.lstrip("\n"))
+
         lines.append(
             "- QUOTAS DE DIVERSITÉ À RESPECTER STRICTEMENT :\n"
             f"- Au maximum {max_fav} proposition(s) parmi les recettes favorites ou évaluées positivement (👍) ci-dessus.\n"
@@ -1215,6 +1231,9 @@ class ATableCoordinator:
             lines.append("- Aliments déjà disponibles à utiliser en priorité :\n" + "\n".join(temp_lines))
         if notes:
             lines.append(f"- Occasion / contraintes précisées par l'utilisateur : {notes}")
+        stove_note = self._stove_level_instruction(prefs)
+        if stove_note:
+            lines.append(stove_note.lstrip("\n"))
         return "\n".join(lines)
 
     _NUTRITION_SKELETON = '{"kcal": 420, "protein_g": 12, "carb_g": 55, "fat_g": 14, "fiber_g": 8}'
@@ -1323,6 +1342,28 @@ class ATableCoordinator:
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (menu invité) : {e}")
             raise ValueError("L'IA n'a pas pu générer ce menu. Réessaie.") from e
+
+        pexels_key = prefs.get("pexels_api_key")
+        if pexels_key:
+            for key in selected:
+                course = courses.get(key)
+                if not isinstance(course, dict):
+                    continue
+                if isinstance(course.get("items"), list):
+                    for item in course["items"]:
+                        if not isinstance(item, dict):
+                            continue
+                        try:
+                            item["image_url"] = await self._pexels_search_image(item.get("title", ""), pexels_key)
+                            item["image_status"] = "found"
+                        except Exception as e:
+                            logger.debug(f"Illustration ignorée pour '{item.get('title', '')}' : {e}")
+                else:
+                    try:
+                        course["image_url"] = await self._pexels_search_image(course.get("title", ""), pexels_key)
+                        course["image_status"] = "found"
+                    except Exception as e:
+                        logger.debug(f"Illustration ignorée pour '{course.get('title', '')}' : {e}")
 
         now = dt_util.now().isoformat()
         menu_id = f"guest_{uuid4().hex}"
@@ -1446,6 +1487,14 @@ class ATableCoordinator:
             logger.error(f"Erreur de parsing JSON (plat du menu invité) : {e}")
             raise ValueError("L'IA n'a pas pu générer de remplacement. Réessaie.") from e
 
+        pexels_key = prefs.get("pexels_api_key")
+        if pexels_key:
+            try:
+                new_value["image_url"] = await self._pexels_search_image(new_value.get("title", ""), pexels_key)
+                new_value["image_status"] = "found"
+            except Exception as e:
+                logger.debug(f"Illustration ignorée pour '{new_value.get('title', '')}' : {e}")
+
         if target_item is not None:
             menu["courses"][course_key]["items"][item_index] = new_value
         else:
@@ -1531,3 +1580,83 @@ class ATableCoordinator:
         """Supprime un menu invité."""
         self.store.data.get("guest_menus", {}).pop(menu_id, None)
         await self.store.async_save()
+
+    def _flat_cook_plan(self, recipes: list[dict[str, Any]]) -> dict[str, Any]:
+        """Repli : concatène simplement les étapes de chaque plat dans l'ordre fourni."""
+        plan = []
+        for idx, recipe in enumerate(recipes):
+            for step_text in recipe.get("steps", []) or []:
+                plan.append({"recipe_index": idx, "step_text": step_text})
+        return {"plan": plan}
+
+    async def async_generate_cook_plan(self, recipes: list[dict[str, Any]]) -> dict[str, Any]:
+        """Génère un plan d'exécution interfolé pour cuisiner plusieurs plats en parallèle.
+
+        `recipes` : liste de {"name": str, "steps": list[str]}.
+        En cas d'échec (appel IA ou parsing), retourne un repli en concaténation plate
+        au lieu de lever une exception.
+        """
+        if not recipes:
+            return {"plan": []}
+
+        if len(recipes) == 1:
+            return self._flat_cook_plan(recipes)
+
+        prefs = self.store.data.get("preferences", {})
+
+        dishes_lines = []
+        for idx, recipe in enumerate(recipes):
+            steps = recipe.get("steps", []) or []
+            steps_text = "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(steps))
+            dishes_lines.append(f"Plat {idx} — {recipe.get('name', '')} :\n{steps_text}")
+
+        instructions = (
+            "Tu es un assistant culinaire qui aide à cuisiner PLUSIEURS plats en même temps, "
+            "en minimisant les temps morts (ex. démarrer la cuisson longue d'un plat pendant "
+            "qu'un autre mijote).\n\n"
+            "PLATS À CUISINER (dans l'ordre) :\n" + "\n\n".join(dishes_lines) + "\n\n"
+            "CONSIGNE IMPORTANTE : ne réécris JAMAIS le texte d'une étape — reprends le texte "
+            "ORIGINAL de chaque étape strictement à l'identique (verbatim). Ton seul travail "
+            "est de RÉORDONNER et d'ENTRELACER les étapes des différents plats dans un ordre "
+            "d'exécution unique et cohérent, en indiquant pour chaque étape à quel plat "
+            "(recipe_index) elle appartient.\n\n"
+            "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
+            "exactement au format :\n"
+            "{\n"
+            '  "plan": [\n'
+            '    {"recipe_index": 0, "step_text": "texte exact de l\'étape"},\n'
+            '    {"recipe_index": 1, "step_text": "texte exact de l\'étape"}\n'
+            "  ]\n"
+            "}"
+        )
+
+        try:
+            response = await self.hass.services.async_call(
+                "ai_task",
+                "generate_data",
+                {
+                    "task_name": "Plan de cuisson entrelacé",
+                    "entity_id": self._ai_task_entity_id(prefs),
+                    "instructions": instructions,
+                },
+                blocking=True,
+                return_response=True,
+            )
+
+            response_text = response.get("data") or response.get("response") or response.get("result") or ""
+            json_match = re.search(r"\{[\s\S]*\}", response_text)
+            if json_match:
+                response_text = json_match.group(0)
+
+            parsed = json.loads(response_text)
+            plan = parsed.get("plan")
+            if not isinstance(plan, list) or not plan:
+                raise ValueError("Réponse IA invalide")
+            for step in plan:
+                if not isinstance(step, dict) or "recipe_index" not in step or "step_text" not in step:
+                    raise ValueError("Étape de plan invalide")
+        except Exception as e:
+            logger.error(f"Erreur de génération du plan de cuisson entrelacé, repli en mode plat : {e}")
+            return self._flat_cook_plan(recipes)
+
+        return {"plan": plan}
