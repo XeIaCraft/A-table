@@ -415,7 +415,7 @@ class ATableCard extends HTMLElement {
         <h2 class="at-section-title">Aujourd'hui</h2>
         <div class="hero-fallback">
           <span>Rien de prévu pour aujourd'hui</span>
-          <button class="pill pill-ok hero-generate" type="button" data-hero-generate>${icon("arrowDown")} Générer des idées</button>
+          <button class="link-cta hero-generate" type="button" data-hero-generate>${icon("arrowDown")} Générer des idées</button>
         </div>
       </section>`;
     }
@@ -430,8 +430,8 @@ class ATableCard extends HTMLElement {
         <div class="hero-scrim">
           <h3 class="at-dish-title">${this._esc(recipe.title)}</h3>
           <div class="hero-actions">
-            <button class="pill pill-ok hero-cook" type="button" data-cook="${this._esc(card.id)}">${icon("check")} Cuisiné</button>
-            <button class="pill pill-neutral hero-detail" type="button" data-detail="${this._esc(card.id)}">${icon("eye")} Détail</button>
+            <button class="pill pill-ok hero-cook" type="button" data-cook="${this._esc(card.id)}" aria-label="Cuisiné">${icon("check")}<span>Cuisiné</span></button>
+            <button class="pill pill-neutral hero-detail" type="button" data-detail="${this._esc(card.id)}" aria-label="Détail">${icon("eye")}<span>Détail</span></button>
           </div>
         </div>
       </div>
@@ -481,7 +481,7 @@ class ATableCard extends HTMLElement {
   _dayHTML(key, label) {
     const cards = this._cards(key);
     const isToday = key === todayKey();
-    return `<section class="day ${isToday ? "is-today" : ""}"><header><span>${label}${isToday ? '<i class="today-dot"></i>' : ""}</span><b>${cards.length}</b></header><div class="zone" data-zone="${key}">${cards.length ? cards.map((card) => this._mealHTML(card)).join("") : this._emptyStateHTML("meal", "Rien de prévu ce jour-là.", `<button type="button" class="pill pill-ok" data-hero-generate>${icon("arrowDown")} Générer des idées</button>`)}</div></section>`;
+    return `<section class="day ${isToday ? "is-today" : ""}"><header><span>${label}${isToday ? '<i class="today-dot"></i>' : ""}</span><b>${cards.length}</b></header><div class="zone" data-zone="${key}">${cards.length ? cards.map((card) => this._mealHTML(card)).join("") : this._emptyStateHTML("meal", "Rien de prévu ce jour-là.", `<button type="button" class="link-cta" data-hero-generate>${icon("arrowDown")} Générer des idées</button>`)}</div></section>`;
   }
 
   _tempIngredientHTML(ing) {
@@ -575,6 +575,11 @@ class ATableCard extends HTMLElement {
         .pill{padding:0;width:40px;height:40px;justify-content:center}
         .pill span{display:none}
       }
+      .hero-actions .pill{padding:0;width:40px;height:40px;justify-content:center}
+      .hero-actions .pill span{display:none}
+      .link-cta{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border:0;background:none;padding:0;font-size:13px;font-weight:700;color:var(--at-accent-ok);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--at-accent-ok) 40%,transparent);text-underline-offset:3px}
+      .link-cta .icon{width:15px;height:15px;color:inherit;flex-shrink:0}
+      .link-cta:hover{color:color-mix(in srgb,var(--at-accent-ok) 80%,var(--primary-text-color,#fff))}
       .generator{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:var(--at-space-4);border:1px solid var(--at-border);border-radius:var(--at-radius-md);background:var(--at-surface-1);margin-bottom:var(--at-space-4)}
       .generator.pulse{animation:at-generator-pulse 1500ms var(--at-ease) 2}
       @keyframes at-generator-pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--primary-color,#4f98a3) 55%,transparent);border-color:var(--at-border)}50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--primary-color,#4f98a3) 0%,transparent);border-color:var(--primary-color,#4f98a3)}}
@@ -725,14 +730,14 @@ class ATableCard extends HTMLElement {
       .cook-lyric.step-current p{font-size:1em}
       .cook-lyric.step-prev-1,.cook-lyric.step-next-1,.cook-lyric.step-prev-2,.cook-lyric.step-next-2,.cook-lyric.step-prev-3plus,.cook-lyric.step-next-3plus{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .cook-lyric.step-prev-1,.cook-lyric.step-next-1{opacity:.55;font-size:16px}
-      .cook-lyric.step-prev-1{transform:translateY(calc(-50% - 72px)) scale(.92)}
-      .cook-lyric.step-next-1{transform:translateY(calc(-50% + 72px)) scale(.92)}
+      .cook-lyric.step-prev-1{transform:translateY(calc(-50% - var(--cook-current-half-height, 72px) - 24px)) scale(.92)}
+      .cook-lyric.step-next-1{transform:translateY(calc(-50% + var(--cook-current-half-height, 72px) + 24px)) scale(.92)}
       .cook-lyric.step-prev-2,.cook-lyric.step-next-2{opacity:.3;font-size:13px}
-      .cook-lyric.step-prev-2{transform:translateY(calc(-50% - 126px)) scale(.85)}
-      .cook-lyric.step-next-2{transform:translateY(calc(-50% + 126px)) scale(.85)}
+      .cook-lyric.step-prev-2{transform:translateY(calc(-50% - var(--cook-current-half-height, 72px) - 72px)) scale(.85)}
+      .cook-lyric.step-next-2{transform:translateY(calc(-50% + var(--cook-current-half-height, 72px) + 72px)) scale(.85)}
       .cook-lyric.step-prev-3plus,.cook-lyric.step-next-3plus{opacity:0;font-size:12px;pointer-events:none}
-      .cook-lyric.step-prev-3plus{transform:translateY(calc(-50% - 170px)) scale(.8)}
-      .cook-lyric.step-next-3plus{transform:translateY(calc(-50% + 170px)) scale(.8)}
+      .cook-lyric.step-prev-3plus{transform:translateY(calc(-50% - var(--cook-current-half-height, 72px) - 120px)) scale(.8)}
+      .cook-lyric.step-next-3plus{transform:translateY(calc(-50% + var(--cook-current-half-height, 72px) + 120px)) scale(.8)}
       @media (prefers-reduced-motion: reduce){.cook-lyric{transition:none}}
       @keyframes at-fade{from{opacity:0}to{opacity:1}}
       @keyframes at-pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
@@ -1497,8 +1502,31 @@ class ATableCard extends HTMLElement {
     return this._stepShortLabel(stepText);
   }
 
+  _stripLeadingFiller(str) {
+    const fillers = [
+      /^pendant la cuisson des? /i,
+      /^pendant que /i,
+      /^pendant ce temps,? /i,
+      /^une fois que /i,
+      /^une fois /i,
+      /^ensuite,? /i,
+      /^puis,? /i,
+      /^après avoir /i,
+      /^dès que /i,
+    ];
+    for (const re of fillers) {
+      if (re.test(str)) {
+        const remainder = str.replace(re, "").trim();
+        if (remainder) {
+          return remainder.charAt(0).toUpperCase() + remainder.slice(1);
+        }
+      }
+    }
+    return str;
+  }
+
   _stepShortLabel(text) {
-    const str = String(text || "").trim();
+    const str = this._stripLeadingFiller(String(text || "").trim());
     if (!str) return "Étape";
     const punctMatch = str.slice(0, 40).match(/^(.*?)[,;.]/);
     if (punctMatch && punctMatch[1].trim().length) {
@@ -1868,6 +1896,14 @@ class ATableCard extends HTMLElement {
       this._mountModal();
     });
     this._bindTimers(overlay);
+    requestAnimationFrame(() => {
+      const current = overlay.querySelector(".cook-lyric.step-current");
+      const container = overlay.querySelector(".cook-lyrics");
+      if (current && container) {
+        const height = current.getBoundingClientRect().height;
+        container.style.setProperty("--cook-current-half-height", `${height / 2}px`);
+      }
+    });
   }
 
   _mountModal() {
