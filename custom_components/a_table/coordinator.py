@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -19,6 +20,23 @@ from .store import ATableStore
 logger = logging.getLogger(__name__)
 
 DEFAULT_AI_TASK_ENTITY_ID = "ai_task.google_ai_task"
+
+
+def _unescape_html_entities(value: Any) -> Any:
+    """Décode récursivement les entités HTML (ex. &#039;) que l'IA insère parfois dans du texte brut.
+
+    Le JSON renvoyé par l'IA est censé contenir du texte simple, mais le modèle échappe parfois
+    des caractères (apostrophes notamment) comme s'il produisait du HTML. Le frontend échappe ensuite
+    correctement ce texte pour l'affichage, ce qui aboutit à des entités doublement encodées
+    (ex. "d&#039;amandes" affiché tel quel). On neutralise ça à la source, une seule fois, ici.
+    """
+    if isinstance(value, str):
+        return html.unescape(value)
+    if isinstance(value, list):
+        return [_unescape_html_entities(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _unescape_html_entities(v) for k, v in value.items()}
+    return value
 
 RECIPE_QUALITY_GUIDELINES = (
     "EXIGENCES DE QUALITÉ :\n"
@@ -249,7 +267,8 @@ class ATableCoordinator:
             '        "fiber_g": 8\n'
             "      },\n"
             '      "tags": ["rapide", "végétarien"],\n'
-            '      "price_per_serving": 3.5\n'
+            '      "price_per_serving": 3.5,\n'
+            '      "image_query": "short English stock-photo search phrase for this dish, 3-5 words"\n'
             "    }\n"
             "  ]\n"
             "}\n\n"
@@ -278,7 +297,7 @@ class ATableCoordinator:
 
         try:
             parsed = json.loads(response_text)
-            proposals = parsed.get("proposals", [])
+            proposals = _unescape_html_entities(parsed.get("proposals", []))
         except Exception as e:
             logger.error(f"Erreur de parsing JSON : {e}")
             proposals = []
@@ -287,7 +306,8 @@ class ATableCoordinator:
         if pexels_key:
             for proposal in proposals:
                 try:
-                    proposal["image_url"] = await self._pexels_search_image(proposal.get("title", ""), pexels_key)
+                    query = proposal.get("image_query") or proposal.get("title", "")
+                    proposal["image_url"] = await self._pexels_search_image(query, pexels_key)
                     proposal["image_status"] = "found"
                 except Exception as e:
                     logger.debug(f"Illustration ignorée pour '{proposal.get('title', '')}' : {e}")
@@ -369,7 +389,7 @@ class ATableCoordinator:
             response_text = json_match.group(0)
 
         try:
-            parsed = json.loads(response_text)
+            parsed = _unescape_html_entities(json.loads(response_text))
             liked_suggestions = [s for s in parsed.get("liked_suggestions", []) if isinstance(s, str)]
             disliked_suggestions = [s for s in parsed.get("disliked_suggestions", []) if isinstance(s, str)]
         except Exception as e:
@@ -718,7 +738,8 @@ class ATableCoordinator:
             '  "notes": "...",\n'
             '  "nutrition": {"kcal": 420, "protein_g": 12, "carb_g": 55, "fat_g": 14, "fiber_g": 8},\n'
             '  "tags": ["rapide", "végétarien"],\n'
-            '  "price_per_serving": 3.5\n'
+            '  "price_per_serving": 3.5,\n'
+            '  "image_query": "short English stock-photo search phrase for this dish, 3-5 words"\n'
             "}"
         )
 
@@ -744,9 +765,19 @@ class ATableCoordinator:
             new_proposal = json.loads(response_text)
             if not isinstance(new_proposal, dict) or not new_proposal.get("title"):
                 raise ValueError("Réponse IA invalide")
+            new_proposal = _unescape_html_entities(new_proposal)
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (remplacement de proposition) : {e}")
             raise ValueError("L'IA n'a pas pu générer de remplacement. Réessaie.") from e
+
+        pexels_key = prefs.get("pexels_api_key")
+        if pexels_key:
+            try:
+                query = new_proposal.get("image_query") or new_proposal.get("title", "")
+                new_proposal["image_url"] = await self._pexels_search_image(query, pexels_key)
+                new_proposal["image_status"] = "found"
+            except Exception as e:
+                logger.debug(f"Illustration ignorée pour '{new_proposal.get('title', '')}' : {e}")
 
         proposals[index] = new_proposal
         await self.store.async_save()
@@ -820,7 +851,7 @@ class ATableCoordinator:
             logger.error(f"Erreur de parsing JSON (modification via IA) : {e}")
             raise ValueError("L'IA n'a pas pu appliquer cette modification. Réessaie.") from e
 
-        return parsed
+        return _unescape_html_entities(parsed)
 
     async def async_refine_recipe(self, recipe_id: str, user_message: str) -> dict[str, Any]:
         """Modifie une recette enregistrée via une consigne libre, en dialogue avec l'IA."""
@@ -1154,6 +1185,7 @@ class ATableCoordinator:
             parsed = json.loads(response_text)
             if not isinstance(parsed, dict) or not parsed.get("title"):
                 raise ValueError("Réponse IA invalide")
+            parsed = _unescape_html_entities(parsed)
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (import de recette) : {e}")
             raise ValueError(
@@ -1243,11 +1275,13 @@ class ATableCoordinator:
             return (
                 f'    "{key}": {{"title": "...", "notes": "...", "items": [{{"title": "...", '
                 f'"ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], "steps": ["..."], '
-                f'"nutrition": {self._NUTRITION_SKELETON}}}]}}'
+                f'"nutrition": {self._NUTRITION_SKELETON}, '
+                '"image_query": "short English stock-photo search phrase for this dish, 3-5 words"}]}'
             )
         return (
             f'    "{key}": {{"title": "...", "ingredients": [{{"name": "...", "quantity": 1, "unit": "..."}}], '
-            f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}}}'
+            f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}, '
+            '"image_query": "short English stock-photo search phrase for this dish, 3-5 words"}'
         )
 
     WINE_INSTRUCTION = (
@@ -1339,6 +1373,8 @@ class ATableCoordinator:
             courses = parsed.get("courses")
             if not isinstance(courses, dict) or not all(k in courses for k in selected):
                 raise ValueError("Réponse IA invalide")
+            parsed = _unescape_html_entities(parsed)
+            courses = parsed.get("courses")
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (menu invité) : {e}")
             raise ValueError("L'IA n'a pas pu générer ce menu. Réessaie.") from e
@@ -1354,13 +1390,15 @@ class ATableCoordinator:
                         if not isinstance(item, dict):
                             continue
                         try:
-                            item["image_url"] = await self._pexels_search_image(item.get("title", ""), pexels_key)
+                            query = item.get("image_query") or item.get("title", "")
+                            item["image_url"] = await self._pexels_search_image(query, pexels_key)
                             item["image_status"] = "found"
                         except Exception as e:
                             logger.debug(f"Illustration ignorée pour '{item.get('title', '')}' : {e}")
                 else:
                     try:
-                        course["image_url"] = await self._pexels_search_image(course.get("title", ""), pexels_key)
+                        query = course.get("image_query") or course.get("title", "")
+                        course["image_url"] = await self._pexels_search_image(query, pexels_key)
                         course["image_status"] = "found"
                     except Exception as e:
                         logger.debug(f"Illustration ignorée pour '{course.get('title', '')}' : {e}")
@@ -1434,7 +1472,8 @@ class ATableCoordinator:
                 "d'ingrédients/techniques).\n\n"
                 "RÉSULTAT ATTENDU : Retourne UNIQUEMENT un JSON valide, sans texte avant ni après, "
                 'exactement au format : {"title": "...", "ingredients": [{"name": "...", "quantity": 1, '
-                f'"unit": "..."}}], "steps": ["..."], "nutrition": {self._NUTRITION_SKELETON}}}'
+                f'"unit": "..."}}], "steps": ["..."], "nutrition": {self._NUTRITION_SKELETON}, '
+                '"image_query": "short English stock-photo search phrase for this dish, 3-5 words"}'
             )
         else:
             composed_note = (
@@ -1448,7 +1487,8 @@ class ATableCoordinator:
                 if is_composed
                 else (
                     '{"title": "...", "ingredients": [{"name": "...", "quantity": 1, "unit": "..."}], '
-                    f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}}}'
+                    f'"steps": ["..."], "notes": "...", "nutrition": {self._NUTRITION_SKELETON}, '
+                    '"image_query": "short English stock-photo search phrase for this dish, 3-5 words"}'
                 )
             )
             instructions = (
@@ -1483,6 +1523,7 @@ class ATableCoordinator:
             new_value = json.loads(response_text)
             if not isinstance(new_value, dict) or not new_value.get("title"):
                 raise ValueError("Réponse IA invalide")
+            new_value = _unescape_html_entities(new_value)
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (plat du menu invité) : {e}")
             raise ValueError("L'IA n'a pas pu générer de remplacement. Réessaie.") from e
@@ -1490,7 +1531,8 @@ class ATableCoordinator:
         pexels_key = prefs.get("pexels_api_key")
         if pexels_key:
             try:
-                new_value["image_url"] = await self._pexels_search_image(new_value.get("title", ""), pexels_key)
+                query = new_value.get("image_query") or new_value.get("title", "")
+                new_value["image_url"] = await self._pexels_search_image(query, pexels_key)
                 new_value["image_status"] = "found"
             except Exception as e:
                 logger.debug(f"Illustration ignorée pour '{new_value.get('title', '')}' : {e}")
@@ -1565,7 +1607,7 @@ class ATableCoordinator:
             response_text = json_match.group(0)
 
         try:
-            parsed = json.loads(response_text)
+            parsed = _unescape_html_entities(json.loads(response_text))
             pairings = [p for p in (parsed.get("wine_pairings") or []) if isinstance(p, dict)]
         except Exception as e:
             logger.error(f"Erreur de parsing JSON (accords mets-vins) : {e}")
@@ -1655,6 +1697,7 @@ class ATableCoordinator:
             for step in plan:
                 if not isinstance(step, dict) or "recipe_index" not in step or "step_text" not in step:
                     raise ValueError("Étape de plan invalide")
+            plan = _unescape_html_entities(plan)
         except Exception as e:
             logger.error(f"Erreur de génération du plan de cuisson entrelacé, repli en mode plat : {e}")
             return self._flat_cook_plan(recipes)
